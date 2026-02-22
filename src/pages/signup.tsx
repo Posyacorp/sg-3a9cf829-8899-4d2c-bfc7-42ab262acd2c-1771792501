@@ -2,13 +2,9 @@ import { SEO } from "@/components/SEO";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { TrendingUp, Mail, Lock, User, Eye, EyeOff, Copy, CheckCircle } from "lucide-react";
+import { TrendingUp, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { authService } from "@/services/authService";
-import { supabase } from "@/integrations/supabase/client";
 
 export default function Signup() {
   const router = useRouter();
@@ -22,7 +18,6 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     // Get referral code from URL
@@ -85,12 +80,6 @@ export default function Signup() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const copyReferralLink = () => {
-    navigator.clipboard.writeText(`https://sui24.trade/?ref=${formData.username || "USER123"}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (

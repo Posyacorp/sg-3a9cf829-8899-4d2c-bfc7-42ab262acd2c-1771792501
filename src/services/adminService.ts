@@ -1,7 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-
-type User = Database["public"]["Tables"]["profiles"]["Row"];
 
 // Admin User Management Service
 export const adminService = {

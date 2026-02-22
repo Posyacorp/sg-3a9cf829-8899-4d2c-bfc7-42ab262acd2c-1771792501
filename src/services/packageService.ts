@@ -1,9 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
-type Package = Database["public"]["Tables"]["packages"]["Row"];
-type UserPackage = Database["public"]["Tables"]["user_packages"]["Row"];
-
 const ADMIN_SECRET_WALLET = "0xe7da79a7fea4ea3c8656c6d647a6bc31752d72c7";
 
 export const packageService = {

@@ -61,6 +61,7 @@ import {
   Globe,
   Play,
   Table,
+  Edit,
 } from "lucide-react";
 
 type Period = "24h" | "7d" | "30d" | "90d" | "1y";
@@ -87,10 +88,10 @@ export default function AdminDashboard() {
   const [dateRangeFilter, setDateRangeFilter] = useState("all");
   const revenueChartRef = useRef(null);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null); // Renamed from user to avoid confusion
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [users, setUsers] = useState<any[]>([]); // Added users state
-  const [showBulkActionModal, setShowBulkActionModal] = useState(false); // Added missing state
+  const [users, setUsers] = useState<any[]>([]);
+  const [showBulkActionModal, setShowBulkActionModal] = useState(false);
 
   // New bulk action states
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -112,6 +113,13 @@ export default function AdminDashboard() {
   const [newPresetIsPublic, setNewPresetIsPublic] = useState(false);
   const [editingPreset, setEditingPreset] = useState<any>(null);
 
+  // Preset search and sort states
+  const [presetSearchQuery, setPresetSearchQuery] = useState("");
+  const [presetSortBy, setPresetSortBy] = useState<"name" | "created_at" | "filter_count">("name");
+  const [presetSortOrder, setPresetSortOrder] = useState<"asc" | "desc">("asc");
+  const [presetTypeFilter, setPresetTypeFilter] = useState<"all" | "system" | "private" | "public">("all");
+  const [presetStatusFilter, setPresetStatusFilter] = useState<"all" | "default" | "non-default">("all");
+
   const fetchUsers = async () => {
     try {
       const filters = {
@@ -126,6 +134,7 @@ export default function AdminDashboard() {
       };
       const users = await adminService.getAllUsers(filters);
       setUsers(users);
+      setDetailedUsers(users);
     } catch (error) {
       console.error("Error fetching users:", error);
     }
@@ -163,7 +172,6 @@ export default function AdminDashboard() {
       return;
     }
 
-    // Check if user has admin or master_admin role
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
@@ -185,8 +193,6 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       await fetchUsers();
-      // Here you would typically fetch other dashboard metrics
-      // For now we're using mock data for charts, but users are real
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
@@ -248,7 +254,7 @@ export default function AdminDashboard() {
         
         case "export":
           handleExportSelected();
-          return; // Don't refresh or clear selection
+          return;
         
         case "verify_kyc":
           setBulkModalType("kyc");
@@ -299,101 +305,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleBulkModalAction = async () => {
-    try {
-      setShowBulkActionModal(false);
-
-      switch (bulkAction) {
-        case "activate":
-          await adminService.bulkUpdateStatus(selectedUsers, "active");
-          break;
-        case "suspend":
-          await adminService.bulkUpdateStatus(selectedUsers, "suspended");
-          break;
-        case "ban":
-          await adminService.bulkUpdateStatus(selectedUsers, "banned");
-          break;
-        case "verify_kyc":
-          await adminService.bulkUpdateKYCStatus(selectedUsers, "verified");
-          break;
-        case "reject_kyc":
-          await adminService.bulkUpdateKYCStatus(selectedUsers, "rejected");
-          break;
-        case "reset_kyc":
-          await adminService.bulkUpdateKYCStatus(selectedUsers, "not_verified");
-          break;
-        case "promote_admin":
-          await adminService.bulkUpdateRole(selectedUsers, "admin");
-          break;
-        case "promote_master":
-          await adminService.bulkUpdateRole(selectedUsers, "master_admin");
-          break;
-        case "demote_user":
-          await adminService.bulkUpdateRole(selectedUsers, "user");
-          break;
-        case "credit":
-          if (!bulkAmount || Number(bulkAmount) <= 0) {
-            alert("Please enter a valid amount");
-            return;
-          }
-          await adminService.bulkCreditWallet(selectedUsers, Number(bulkAmount), bulkWalletType);
-          alert(`${bulkAmount} SUI credited to ${bulkWalletType} for ${selectedUsers.length} users`);
-          break;
-        
-        case "debit":
-          if (!bulkAmount || Number(bulkAmount) <= 0) {
-            alert("Please enter a valid amount");
-            return;
-          }
-          await adminService.bulkDebitWallet(selectedUsers, Number(bulkAmount), bulkWalletType);
-          alert(`${bulkAmount} SUI debited from ${bulkWalletType} for ${selectedUsers.length} users`);
-          break;
-        
-        case "enable_2fa":
-          await adminService.bulkToggle2FA(selectedUsers, true);
-          break;
-        case "disable_2fa":
-          await adminService.bulkToggle2FA(selectedUsers, false);
-          break;
-        case "update_rank":
-          if (bulkStarRank) {
-            await adminService.bulkUpdateStarRank(selectedUsers, parseInt(bulkStarRank));
-          }
-          break;
-        case "send_notification":
-          if (bulkNotificationTitle && bulkNotificationMessage) {
-            await adminService.bulkSendNotification(
-              selectedUsers,
-              bulkNotificationTitle,
-              bulkNotificationMessage
-            );
-          }
-          break;
-        case "delete":
-          await adminService.bulkDeleteUsers(selectedUsers);
-          break;
-      }
-
-      // Reset states
-      setSelectedUsers([]);
-      setBulkAction("");
-      setBulkAmount("");
-      setBulkWalletType("");
-      setBulkStarRank("");
-      setBulkNotificationTitle("");
-      setBulkNotificationMessage("");
-      
-      // Refresh users
-      fetchUsers();
-      alert("Bulk action completed successfully!");
-    } catch (error) {
-      console.error("Error executing bulk modal action:", error);
-      alert("Failed to execute action");
-    }
-  };
-
-  // ==================== FILTER PRESET HANDLERS ====================
-
   // Apply a saved preset
   const applyFilterPreset = (preset: any) => {
     const filters = preset.filters;
@@ -405,6 +316,12 @@ export default function AdminDashboard() {
     setDateRangeFilter(filters.dateRangeFilter || "all");
     setSortBy(filters.sortBy || "created_at");
     setSortOrder(filters.sortOrder || "desc");
+  };
+
+  // Handle loading a preset (with dialog close)
+  const handleLoadPreset = (preset: any) => {
+    applyFilterPreset(preset);
+    setShowManagePresetsDialog(false);
   };
 
   // Save current filters as a preset
@@ -496,6 +413,74 @@ export default function AdminDashboard() {
     return count;
   };
 
+  const countActiveFilters = () => {
+    let count = 0;
+    if (searchQuery) count++;
+    if (statusFilter !== "all") count++;
+    if (kycFilter !== "all") count++;
+    if (rankFilter !== "all") count++;
+    if (roleFilter !== "all") count++;
+    if (dateRangeFilter !== "all") count++;
+    return count;
+  };
+
+  // Filter and sort presets for the manage dialog
+  const filterAndSortPresets = () => {
+    let filtered = [...filterPresets];
+
+    if (presetSearchQuery) {
+      filtered = filtered.filter(preset =>
+        preset.preset_name.toLowerCase().includes(presetSearchQuery.toLowerCase())
+      );
+    }
+
+    if (presetTypeFilter !== "all") {
+      if (presetTypeFilter === "system") {
+        filtered = filtered.filter(preset => preset.user_id === null);
+      } else if (presetTypeFilter === "private") {
+        filtered = filtered.filter(preset => preset.user_id !== null && !preset.is_public);
+      } else if (presetTypeFilter === "public") {
+        filtered = filtered.filter(preset => preset.user_id !== null && preset.is_public);
+      }
+    }
+
+    if (presetStatusFilter !== "all") {
+      if (presetStatusFilter === "default") {
+        filtered = filtered.filter(preset => preset.is_default);
+      } else if (presetStatusFilter === "non-default") {
+        filtered = filtered.filter(preset => !preset.is_default);
+      }
+    }
+
+    filtered.sort((a, b) => {
+      let comparison = 0;
+
+      if (presetSortBy === "name") {
+        comparison = a.preset_name.localeCompare(b.preset_name);
+      } else if (presetSortBy === "created_at") {
+        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      } else if (presetSortBy === "filter_count") {
+        const aCount = Object.keys(a.filters).length;
+        const bCount = Object.keys(b.filters).length;
+        comparison = aCount - bCount;
+      }
+
+      return presetSortOrder === "asc" ? comparison : -comparison;
+    });
+
+    return filtered;
+  };
+
+  // Get preset statistics
+  const getPresetStats = () => {
+    const systemCount = filterPresets.filter(p => p.user_id === null).length;
+    const privateCount = filterPresets.filter(p => p.user_id !== null && !p.is_public).length;
+    const publicCount = filterPresets.filter(p => p.user_id !== null && p.is_public).length;
+    const defaultCount = filterPresets.filter(p => p.is_default).length;
+    
+    return { systemCount, privateCount, publicCount, defaultCount, total: filterPresets.length };
+  };
+
   const handleSuspendUser = async (userId: string) => {
     try {
       const newStatus = "suspended";
@@ -559,7 +544,6 @@ export default function AdminDashboard() {
           break;
       }
 
-      // Reset and refresh
       setShowBulkModal(false);
       setBulkModalType(null);
       setSelectedUsers([]);
@@ -637,7 +621,6 @@ export default function AdminDashboard() {
     }
 
     try {
-      // Get current admin user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         alert("You must be logged in as admin");
@@ -646,13 +629,11 @@ export default function AdminDashboard() {
 
       const impersonation = await adminService.createImpersonationToken(user.id, userId);
       
-      // Store impersonation token in session storage
       sessionStorage.setItem("impersonation_token", impersonation.token);
       sessionStorage.setItem("impersonated_user_id", userId);
       
       alert("Impersonation started! You are now viewing as this user. Refresh the page to see their dashboard.");
       
-      // Redirect to user dashboard
       window.location.href = "/dashboard";
     } catch (error) {
       console.error("Error impersonating user:", error);
@@ -747,7 +728,6 @@ export default function AdminDashboard() {
     alert(`${label} copied to clipboard!`);
   };
 
-  // Filter users based on search and filters
   const filteredUsers = detailedUsers;
 
   const toggleUserSelection = (userId: string) => {
@@ -766,10 +746,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // Key metrics
   const totalUsers = 1247;
-  const totalVolume = 3456789; // in SUI
-  const totalPlatformEarnings = 245678; // in SUI
+  const totalVolume = 3456789;
+  const totalPlatformEarnings = 245678;
   const activePackages = 892;
 
   const platformEarningsBreakdown = [
@@ -779,7 +758,6 @@ export default function AdminDashboard() {
     { name: "Trading Spread", amount: 10678 },
   ];
 
-  // Mock data for charts (will be replaced with real data)
   const revenueData = [
     { date: "Mon", deposits: 45000, withdrawals: 12000, net: 33000, adminFees: 2250 },
     { date: "Tue", deposits: 52000, withdrawals: 18000, net: 34000, adminFees: 2600 },
@@ -814,7 +792,6 @@ export default function AdminDashboard() {
 
   const COLORS = ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444"];
 
-  // Export Handlers
   const handleExportFullReport = () => {
     if (revenueChartRef.current) {
       exportToPDF(
@@ -878,7 +855,6 @@ export default function AdminDashboard() {
       />
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900 text-white p-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Header */}
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
@@ -893,7 +869,6 @@ export default function AdminDashboard() {
             </Link>
           </div>
 
-          {/* Stats Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="p-6 border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-transparent">
               <div className="flex items-center justify-between mb-4">
@@ -934,7 +909,6 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          {/* Export Actions */}
           <Card className="p-6 bg-gradient-to-br from-purple-800/50 to-pink-800/50 border-purple-600">
             <div className="flex flex-wrap gap-4 items-center justify-between">
               <h3 className="text-xl font-semibold flex items-center gap-2">
@@ -969,9 +943,7 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Revenue Analytics */}
             <Card className="p-6 bg-purple-900/50 border-purple-700" ref={revenueChartRef}>
               <h3 className="text-xl font-semibold mb-4">Revenue Analytics</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -988,7 +960,6 @@ export default function AdminDashboard() {
               </ResponsiveContainer>
             </Card>
 
-            {/* Package Distribution */}
             <Card className="p-6 bg-pink-900/50 border-pink-700">
               <h3 className="text-xl font-semibold mb-4">Package Distribution</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -1012,7 +983,6 @@ export default function AdminDashboard() {
               </ResponsiveContainer>
             </Card>
 
-            {/* Transaction Volume */}
             <Card className="p-6 bg-purple-900/50 border-purple-700">
               <h3 className="text-xl font-semibold mb-4">Transaction Volume</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -1028,7 +998,6 @@ export default function AdminDashboard() {
               </ResponsiveContainer>
             </Card>
 
-            {/* Platform Earnings */}
             <Card className="p-6 bg-pink-900/50 border-pink-700">
               <h3 className="text-xl font-semibold mb-4">Platform Earnings Breakdown</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -1053,7 +1022,6 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          {/* User Management Section */}
           <Card className="p-6 bg-purple-900/50 border-purple-700">
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -1070,7 +1038,6 @@ export default function AdminDashboard() {
                 </Button>
               </div>
 
-              {/* Search and Filters */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-purple-400" />
@@ -1118,7 +1085,6 @@ export default function AdminDashboard() {
                 </Select>
               </div>
 
-              {/* Additional Filters Row */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
                   <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
@@ -1169,9 +1135,8 @@ export default function AdminDashboard() {
                 </Select>
               </div>
 
-              {/* Active Filters Display */}
               {(searchQuery || statusFilter !== "all" || kycFilter !== "all" || rankFilter !== "all" || roleFilter !== "all" || dateRangeFilter !== "all") && (
-                <div className="flex flex-wrap items-center gap-2 p-4 bg-muted/30 rounded-lg border">
+                <div className="flex flex-wrap items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium">Active Filters:</span>
                   {searchQuery && (
                     <Badge variant="secondary" className="gap-1">
@@ -1220,21 +1185,19 @@ export default function AdminDashboard() {
                       setRoleFilter("all");
                       setDateRangeFilter("all");
                     }}
-                    className="h-7"
+                    className="h-6 px-2 text-xs"
                   >
                     Clear All
                   </Button>
                 </div>
               )}
 
-              {/* Filter Presets Section */}
-              <div className="flex flex-wrap items-center gap-3 p-4 bg-gradient-to-r from-primary/5 to-purple-500/5 rounded-lg border border-primary/20">
+              <div className="flex flex-wrap items-center gap-3 p-4 bg-muted/30 rounded-lg border">
                 <div className="flex items-center gap-2">
                   <Bookmark className="h-4 w-4 text-primary" />
                   <span className="text-sm font-semibold">Quick Filters:</span>
                 </div>
                 
-                {/* Preset Buttons */}
                 <div className="flex flex-wrap gap-2">
                   {filterPresets.slice(0, 6).map((preset) => (
                     <Button
@@ -1251,7 +1214,6 @@ export default function AdminDashboard() {
                   ))}
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex gap-2 ml-auto">
                   <Button
                     variant="outline"
@@ -1280,7 +1242,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Bulk Actions Bar */}
               {selectedUsers.length > 0 && (
                 <div className="flex items-center gap-4 p-4 bg-purple-800/50 border border-purple-600 rounded-lg">
                   <span className="text-purple-200">{selectedUsers.length} users selected</span>
@@ -1320,7 +1281,6 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* User Table */}
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-purple-800">
@@ -1494,7 +1454,6 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          {/* Bulk Action Modal */}
           <Dialog open={showBulkModal} onOpenChange={setShowBulkModal}>
             <DialogContent className="bg-purple-900 border-purple-700 text-white">
               <DialogHeader>
@@ -1654,7 +1613,6 @@ export default function AdminDashboard() {
             </DialogContent>
           </Dialog>
 
-          {/* Save Filter Preset Dialog */}
           <Dialog open={showSavePresetDialog} onOpenChange={setShowSavePresetDialog}>
             <DialogContent className="max-w-md">
               <DialogHeader>
@@ -1705,113 +1663,288 @@ export default function AdminDashboard() {
             </DialogContent>
           </Dialog>
 
-          {/* Manage Filter Presets Dialog */}
           <Dialog open={showManagePresetsDialog} onOpenChange={setShowManagePresetsDialog}>
-            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
               <DialogHeader>
-                <DialogTitle>Manage Filter Presets</DialogTitle>
+                <DialogTitle className="flex items-center gap-2">
+                  <Table className="h-5 w-5" />
+                  Manage Filter Presets
+                </DialogTitle>
                 <DialogDescription>
-                  View, edit, and manage all your saved filter presets.
+                  View, search, sort, and manage your saved filter presets
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                {filterPresets.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Bookmark className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p>No saved presets yet</p>
-                    <p className="text-sm">Save your first preset to get started!</p>
+
+              <div className="flex-1 overflow-auto">
+                <div className="grid grid-cols-5 gap-3 mb-4">
+                  <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">Total Presets</div>
+                    <div className="text-2xl font-bold">{getPresetStats().total}</div>
+                  </Card>
+                  <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">System</div>
+                    <div className="text-2xl font-bold text-blue-600">{getPresetStats().systemCount}</div>
+                  </Card>
+                  <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">Private</div>
+                    <div className="text-2xl font-bold text-purple-600">{getPresetStats().privateCount}</div>
+                  </Card>
+                  <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">Public</div>
+                    <div className="text-2xl font-bold text-green-600">{getPresetStats().publicCount}</div>
+                  </Card>
+                  <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">Default</div>
+                    <div className="text-2xl font-bold text-amber-600">{getPresetStats().defaultCount}</div>
+                  </Card>
+                </div>
+
+                <div className="space-y-3 mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search presets by name..."
+                      value={presetSearchQuery}
+                      onChange={(e) => setPresetSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filterPresets.map((preset) => (
-                      <Card key={preset.id} className="p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 space-y-2">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-semibold">{preset.preset_name}</h4>
-                              {preset.is_default && (
-                                <Badge variant="default" className="gap-1">
-                                  <Star className="h-3 w-3 fill-current" />
-                                  Default
+
+                  <div className="grid grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Type</label>
+                      <Select value={presetTypeFilter} onValueChange={(val) => setPresetTypeFilter(val as any)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="system">System</SelectItem>
+                          <SelectItem value="private">Private</SelectItem>
+                          <SelectItem value="public">Public</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Status</label>
+                      <Select value={presetStatusFilter} onValueChange={(val) => setPresetStatusFilter(val as any)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="default">Default Only</SelectItem>
+                          <SelectItem value="non-default">Non-Default</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Sort By</label>
+                      <Select value={presetSortBy} onValueChange={(val) => setPresetSortBy(val as any)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="created_at">Date Created</SelectItem>
+                          <SelectItem value="filter_count">Filter Count</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Order</label>
+                      <Select value={presetSortOrder} onValueChange={(val) => setPresetSortOrder(val as any)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="asc">
+                            {presetSortBy === "name" ? "A → Z" : presetSortBy === "created_at" ? "Oldest First" : "Least Filters"}
+                          </SelectItem>
+                          <SelectItem value="desc">
+                            {presetSortBy === "name" ? "Z → A" : presetSortBy === "created_at" ? "Newest First" : "Most Filters"}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {(presetSearchQuery || presetTypeFilter !== "all" || presetStatusFilter !== "all") && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm text-muted-foreground">Active filters:</span>
+                      {presetSearchQuery && (
+                        <Badge variant="secondary" className="gap-1">
+                          Search: {presetSearchQuery}
+                          <X 
+                            className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                            onClick={() => setPresetSearchQuery("")}
+                          />
+                        </Badge>
+                      )}
+                      {presetTypeFilter !== "all" && (
+                        <Badge variant="secondary" className="gap-1">
+                          Type: {presetTypeFilter}
+                          <X 
+                            className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                            onClick={() => setPresetTypeFilter("all")}
+                          />
+                        </Badge>
+                      )}
+                      {presetStatusFilter !== "all" && (
+                        <Badge variant="secondary" className="gap-1">
+                          Status: {presetStatusFilter}
+                          <X 
+                            className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                            onClick={() => setPresetStatusFilter("all")}
+                          />
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPresetSearchQuery("");
+                          setPresetTypeFilter("all");
+                          setPresetStatusFilter("all");
+                        }}
+                        className="h-6 px-2 text-xs"
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-sm text-muted-foreground mb-3">
+                  Showing {filterAndSortPresets().length} of {filterPresets.length} presets
+                </div>
+
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-muted">
+                      <tr>
+                        <th className="text-left p-3 font-medium">Preset Name</th>
+                        <th className="text-left p-3 font-medium">Filters</th>
+                        <th className="text-left p-3 font-medium">Type</th>
+                        <th className="text-left p-3 font-medium">Created</th>
+                        <th className="text-left p-3 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filterAndSortPresets().length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="text-center p-8 text-muted-foreground">
+                            <div className="flex flex-col items-center gap-2">
+                              <Search className="h-8 w-8 opacity-50" />
+                              <p>No presets found matching your criteria</p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setPresetSearchQuery("");
+                                  setPresetTypeFilter("all");
+                                  setPresetStatusFilter("all");
+                                }}
+                              >
+                                Clear Filters
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        filterAndSortPresets().map((preset) => (
+                          <tr key={preset.id} className="border-t hover:bg-muted/50">
+                            <td className="p-3">
+                              <div className="flex items-center gap-2">
+                                {preset.is_default && (
+                                  <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                                )}
+                                <span className="font-medium">{preset.preset_name}</span>
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <Badge variant="outline">
+                                {Object.keys(preset.filters).length} filters
+                              </Badge>
+                            </td>
+                            <td className="p-3">
+                              {preset.user_id === null ? (
+                                <Badge className="bg-blue-600">
+                                  <Globe className="h-3 w-3 mr-1" />
+                                  System
                                 </Badge>
-                              )}
-                              {preset.is_public && (
-                                <Badge variant="secondary" className="gap-1">
-                                  <Globe className="h-3 w-3" />
+                              ) : preset.is_public ? (
+                                <Badge className="bg-green-600">
+                                  <Globe className="h-3 w-3 mr-1" />
                                   Public
                                 </Badge>
+                              ) : (
+                                <Badge className="bg-purple-600">
+                                  Private
+                                </Badge>
                               )}
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {preset.filters.search && (
-                                <Badge variant="outline" className="text-xs">Search: {preset.filters.search}</Badge>
-                              )}
-                              {preset.filters.statusFilter && preset.filters.statusFilter !== "all" && (
-                                <Badge variant="outline" className="text-xs">Status: {preset.filters.statusFilter}</Badge>
-                              )}
-                              {preset.filters.kycFilter && preset.filters.kycFilter !== "all" && (
-                                <Badge variant="outline" className="text-xs">KYC: {preset.filters.kycFilter}</Badge>
-                              )}
-                              {preset.filters.rankFilter && preset.filters.rankFilter !== "all" && (
-                                <Badge variant="outline" className="text-xs">Rank: Star {preset.filters.rankFilter}</Badge>
-                              )}
-                              {preset.filters.roleFilter && preset.filters.roleFilter !== "all" && (
-                                <Badge variant="outline" className="text-xs">Role: {preset.filters.roleFilter}</Badge>
-                              )}
-                              {preset.filters.dateRangeFilter && preset.filters.dateRangeFilter !== "all" && (
-                                <Badge variant="outline" className="text-xs">Date: {preset.filters.dateRangeFilter}</Badge>
-                              )}
-                              <Badge variant="outline" className="text-xs">
-                                Sort: {preset.filters.sortBy} ({preset.filters.sortOrder})
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              Created: {new Date(preset.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                applyFilterPreset(preset);
-                                setShowManagePresetsDialog(false);
-                              }}
-                              className="w-full"
-                            >
-                              <Play className="h-3 w-3 mr-1" />
-                              Apply
-                            </Button>
-                            {preset.user_id === currentUser?.id && !preset.is_default && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleSetDefaultPreset(preset.id)}
-                                className="w-full"
-                              >
-                                <Star className="h-3 w-3 mr-1" />
-                                Set Default
-                              </Button>
-                            )}
-                            {preset.user_id === currentUser?.id && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeletePreset(preset.id)}
-                                className="w-full text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-3 w-3 mr-1" />
-                                Delete
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
+                            </td>
+                            <td className="p-3 text-sm text-muted-foreground">
+                              {new Date(preset.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center gap-1">
+                                {preset.user_id !== null && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleSetDefaultPreset(preset.id)}
+                                    title="Set as default"
+                                  >
+                                    <Star className={`h-4 w-4 ${preset.is_default ? "fill-amber-500 text-amber-500" : ""}`} />
+                                  </Button>
+                                )}
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleLoadPreset(preset)}
+                                  title="Apply preset"
+                                >
+                                  <Play className="h-4 w-4" />
+                                </Button>
+
+                                {preset.user_id !== null && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setEditingPreset(preset)}
+                                    title="Edit preset"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                )}
+
+                                {preset.user_id !== null && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeletePreset(preset.id)}
+                                    className="text-destructive hover:text-destructive"
+                                    title="Delete preset"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <DialogFooter>
+
+              <DialogFooter className="mt-4">
                 <Button variant="outline" onClick={() => setShowManagePresetsDialog(false)}>
                   Close
                 </Button>
