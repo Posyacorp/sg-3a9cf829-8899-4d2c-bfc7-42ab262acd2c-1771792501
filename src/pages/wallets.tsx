@@ -1,19 +1,23 @@
 import { SEO } from "@/components/SEO";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { 
-  TrendingUp, Wallet, ArrowUpRight, ArrowDownRight, 
-  Send, Plus, History, Copy, CheckCircle 
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Wallet, 
+  ArrowUpRight,
+  ArrowDownRight,
+  Send,
+  Plus,
+  TrendingUp,
+  Copy
+} from "lucide-react";
 import { walletService } from "@/services/walletService";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect } from "react";
 
 interface WalletBalance {
   main: number;
@@ -45,14 +49,12 @@ export default function WalletsPage() {
 
   const [activeTab, setActiveTab] = useState("overview");
   const [depositAmount, setDepositAmount] = useState("");
-  const [depositHash, setDepositHash] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawWallet, setWithdrawWallet] = useState("main");
   const [p2pRecipient, setP2pRecipient] = useState("");
   const [p2pAmount, setP2pAmount] = useState("");
   const [depositAddress] = useState("0xf57c83c39866238fe4860ef426426d170c3b6f6b");
-  const [copied, setCopied] = useState(false);
-
+  
   useEffect(() => {
     fetchWalletData();
   }, []);
@@ -92,12 +94,6 @@ export default function WalletsPage() {
       }));
       setTransactions(formattedTxs);
     }
-  };
-
-  const copyAddress = () => {
-    navigator.clipboard.writeText(depositAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDeposit = () => {

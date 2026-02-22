@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { 
-  TrendingUp, Wallet, Clock, Users, Gift, ArrowUpRight, 
+  TrendingUp, Wallet, Clock, Gift, ArrowUpRight, 
   ArrowDownRight, Copy, CheckCircle, AlertCircle, DollarSign, ArrowLeftRight 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -60,15 +60,6 @@ export default function Dashboard() {
   const [canClaim, setCanClaim] = useState(false);
   const [referralLink, setReferralLink] = useState("");
   const [copied, setCopied] = useState(false);
-
-  const [stats, setStats] = useState({
-    totalBalance: 0,
-    activePackages: 0,
-    totalEarnings: 0,
-    teamSize: 0
-  });
-  
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -139,25 +130,6 @@ export default function Dashboard() {
       
     if (userProfile?.referral_code) {
       setReferralLink(`${window.location.origin}/signup?ref=${userProfile.referral_code}`);
-    }
-
-    setStats({
-      totalBalance,
-      activePackages,
-      totalEarnings,
-      teamSize: count || 0
-    });
-
-    // 5. Get Recent Activity
-    const { data: activity } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    if (activity) {
-      setRecentActivity(activity);
     }
   };
 

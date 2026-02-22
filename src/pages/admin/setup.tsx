@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { SEO } from "@/components/SEO";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";

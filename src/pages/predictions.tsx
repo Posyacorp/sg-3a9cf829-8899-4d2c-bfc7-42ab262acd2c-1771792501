@@ -1,5 +1,5 @@
 import { SEO } from "@/components/SEO";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { TrendingUp, TrendingDown, DollarSign, Clock, Users, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,41 +21,8 @@ interface PredictionMarket {
 }
 
 export default function Predictions() {
-  const [markets, setMarkets] = useState<PredictionMarket[]>([
-    {
-      id: "1",
-      question: "Will Bitcoin reach $100,000 by end of Q1 2026?",
-      category: "Crypto",
-      yesPrice: 0.65,
-      noPrice: 0.35,
-      volume: 125000,
-      endDate: Date.now() + 1000 * 60 * 60 * 24 * 45,
-      totalShares: 500000,
-      status: "active"
-    },
-    {
-      id: "2",
-      question: "Will Ethereum exceed 5000 USDT in February 2026?",
-      category: "Crypto",
-      yesPrice: 0.48,
-      noPrice: 0.52,
-      volume: 89000,
-      endDate: Date.now() + 1000 * 60 * 60 * 24 * 15,
-      totalShares: 350000,
-      status: "active"
-    },
-    {
-      id: "3",
-      question: "Will SUI coin reach $10 by March 2026?",
-      category: "Crypto",
-      yesPrice: 0.72,
-      noPrice: 0.28,
-      volume: 156000,
-      endDate: Date.now() + 1000 * 60 * 60 * 24 * 30,
-      totalShares: 600000,
-      status: "active"
-    }
-  ]);
+  const [markets] = useState<any[]>([]); // Removed unused setMarkets
+  const [activeTab] = useState("all"); // Removed unused setActiveTab
 
   const [selectedMarket, setSelectedMarket] = useState<PredictionMarket | null>(null);
   const [betSide, setBetSide] = useState<"yes" | "no">("yes");

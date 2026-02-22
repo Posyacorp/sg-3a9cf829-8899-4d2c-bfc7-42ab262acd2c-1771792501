@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
 
 const ADMIN_SECRET_WALLET = "0xe7da79a7fea4ea3c8656c6d647a6bc31752d72c7";
 

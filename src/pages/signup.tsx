@@ -5,6 +5,10 @@ import { useRouter } from "next/router";
 import { TrendingUp, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { authService } from "@/services/authService";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Signup() {
   const router = useRouter();
@@ -57,7 +61,7 @@ export default function Signup() {
       }
 
       // 2. Sign up with Supabase Auth
-      const { user, error } = await authService.signUp(
+      const { error } = await authService.signUp(
         formData.email, 
         formData.password, 
         formData.referralCode, // Pass the referral code

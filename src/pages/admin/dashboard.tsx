@@ -1,42 +1,11 @@
 import { SEO } from "@/components/SEO";
-import { useState, useEffect, useRef } from "react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
-import { supabase } from "@/integrations/supabase/client";
 import Link from "next/link";
-import Papa from "papaparse";
-import { adminService } from "@/services/adminService";
-import {
-  exportToPDF,
-  exportToCSV,
-  exportMultipleToCSV,
-  exportChartToPDF,
-} from "@/lib/exportUtils";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
+import { adminService } from "@/services/adminService";
 import { authService } from "@/services/authService";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
+import { exportToCSV, exportToPDF, exportMultipleToCSV, exportChartToPDF } from "@/lib/exportUtils";
 import {
   Users,
   Package,
@@ -62,7 +31,48 @@ import {
   Play,
   Table,
   Edit,
+  Ban,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 type Period = "24h" | "7d" | "30d" | "90d" | "1y";
 
@@ -88,6 +98,8 @@ export default function AdminDashboard() {
   const [dateRangeFilter, setDateRangeFilter] = useState("all");
   const revenueChartRef = useRef(null);
   const [loading, setLoading] = useState(true);
+  // const [stats, setStats] = useState<any>(null);
+  // const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
@@ -189,6 +201,7 @@ export default function AdminDashboard() {
     fetchDashboardData();
   };
 
+  // Fetch dashboard data
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -361,18 +374,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Update an existing preset
-  const handleUpdatePreset = async (presetId: string, updates: any) => {
-    try {
-      await adminService.updateFilterPreset(presetId, updates);
-      fetchFilterPresets();
-      alert("Preset updated successfully!");
-    } catch (error) {
-      console.error("Error updating preset:", error);
-      alert("Failed to update preset");
-    }
-  };
-
   // Delete a preset
   const handleDeletePreset = async (presetId: string) => {
     if (!confirm("Are you sure you want to delete this preset?")) return;
@@ -413,6 +414,7 @@ export default function AdminDashboard() {
     return count;
   };
 
+  /*
   const countActiveFilters = () => {
     let count = 0;
     if (searchQuery) count++;
@@ -423,6 +425,7 @@ export default function AdminDashboard() {
     if (dateRangeFilter !== "all") count++;
     return count;
   };
+  */
 
   // Filter and sort presets for the manage dialog
   const filterAndSortPresets = () => {
@@ -481,6 +484,7 @@ export default function AdminDashboard() {
     return { systemCount, privateCount, publicCount, defaultCount, total: filterPresets.length };
   };
 
+  /*
   const handleSuspendUser = async (userId: string) => {
     try {
       const newStatus = "suspended";
@@ -492,6 +496,7 @@ export default function AdminDashboard() {
       alert("Failed to update user status");
     }
   };
+  */
 
   const executeBulkModalAction = async () => {
     try {
@@ -558,36 +563,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handlePasswordReset = async () => {
-    if (!selectedUser || !newPassword) return;
-    
-    if (newPassword.length < 6) {
-      alert("Password must be at least 6 characters");
-      return;
-    }
-
-    try {
-      await adminService.resetUserPassword(selectedUser.id, newPassword);
-      alert("Password reset successfully!");
-      setNewPassword("");
-    } catch (error) {
-      console.error("Error resetting password:", error);
-      alert("Failed to reset password");
-    }
-  };
-
-  const handleSendResetEmail = async () => {
-    if (!selectedUser) return;
-
-    try {
-      const result = await adminService.sendPasswordResetEmail(selectedUser.email, selectedUser.id);
-      alert(`Password reset email sent to ${result.email}\n\nReset link: ${result.resetLink}`);
-    } catch (error) {
-      console.error("Error sending reset email:", error);
-      alert("Failed to send reset email");
-    }
-  };
-
   const handleViewActivity = async (user: any) => {
     try {
       const activities = await adminService.getUserActivity(user.id);
@@ -597,47 +572,6 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error("Error fetching activities:", error);
       alert("Failed to load activity timeline");
-    }
-  };
-
-  const handleToggle2FA = async (userId: string, currentStatus: boolean) => {
-    try {
-      await adminService.toggle2FA(userId, !currentStatus);
-      alert(`2FA ${!currentStatus ? "enabled" : "disabled"} successfully`);
-      fetchUsers();
-      if (selectedUser?.id === userId) {
-        const updated = await adminService.getUserDetails(userId);
-        setSelectedUser(updated);
-      }
-    } catch (error) {
-      console.error("Error toggling 2FA:", error);
-      alert("Failed to toggle 2FA");
-    }
-  };
-
-  const handleImpersonateUser = async (userId: string) => {
-    if (!confirm("Are you sure you want to impersonate this user? This action will be logged.")) {
-      return;
-    }
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        alert("You must be logged in as admin");
-        return;
-      }
-
-      const impersonation = await adminService.createImpersonationToken(user.id, userId);
-      
-      sessionStorage.setItem("impersonation_token", impersonation.token);
-      sessionStorage.setItem("impersonated_user_id", userId);
-      
-      alert("Impersonation started! You are now viewing as this user. Refresh the page to see their dashboard.");
-      
-      window.location.href = "/dashboard";
-    } catch (error) {
-      console.error("Error impersonating user:", error);
-      alert("Failed to start impersonation");
     }
   };
 
@@ -721,11 +655,6 @@ export default function AdminDashboard() {
     }));
 
     exportToCSV(csvData, `sui24_users_${new Date().toISOString().split("T")[0]}`);
-  };
-
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    alert(`${label} copied to clipboard!`);
   };
 
   const filteredUsers = detailedUsers;
@@ -876,7 +805,7 @@ export default function AdminDashboard() {
                 <span className="text-sm text-gray-400">Total Users</span>
               </div>
               <div className="text-3xl font-bold">{totalUsers.toLocaleString()}</div>
-              <div className="text-xs text-green-400 mt-2">+12% from last month</div>
+              <div className="text-xs text-green-400 mt-2">+1% from last month</div>
             </Card>
 
             <Card className="p-6 border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-transparent">
@@ -1316,7 +1245,7 @@ export default function AdminDashboard() {
                       </tr>
                     ) : (
                       filteredUsers.map((user) => (
-                        <tr key={user.id} className="border-b border-purple-700 hover:bg-purple-800/30">
+                        <tr key={user.id} className="border-b border-purple-600 hover:bg-purple-800/30">
                           <td className="p-3">
                             <Checkbox
                               checked={selectedUsers.includes(user.id)}

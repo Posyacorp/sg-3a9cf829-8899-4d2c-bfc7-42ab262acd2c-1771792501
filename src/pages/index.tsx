@@ -57,7 +57,6 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  const [priceChange, setPriceChange] = useState<number>(0);
   const [tickers, setTickers] = useState<PriceTicker[]>([
     { symbol: "SUI", price: 0.92, change: 5.2, changePercent: 5.2 },
     { symbol: "BTC", price: 98420, change: 1250, changePercent: 1.3 },

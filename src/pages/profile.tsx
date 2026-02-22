@@ -1,20 +1,22 @@
 import { SEO } from "@/components/SEO";
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
-import { User, Shield, Key, Wallet, Mail, Save, ArrowLeft } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { User, Mail, Shield, ArrowLeft, Wallet, Key, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getCurrentUser, updateUserProfile } from "@/services/userService";
-import { walletService } from "@/services/walletService";
+import { updateUserProfile } from "@/services/userService";
+import Link from "next/link";
 
-export default function ProfilePage() {
+export default function Profile() {
   const router = useRouter();
   const { toast } = useToast();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<any>(null);
@@ -24,36 +26,44 @@ export default function ProfilePage() {
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
 
-  useEffect(() => {
-    fetchProfileData();
-  }, []);
-
-  const fetchProfileData = async () => {
+  const fetchProfileData = useCallback(async () => {
     try {
-      const { success, user, error } = await getCurrentUser();
-      if (!success || !user) {
-        toast({
-          title: "Error fetching profile",
-          description: error,
-          variant: "destructive",
-        });
-        return;
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const { data: profileData, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        
+        if (error) throw error;
+        
+        // Fetch wallet data
+        const { data: walletData } = await supabase
+          .from("wallets")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+        
+        setUser({ ...user, ...profileData });
+        setProfile(profileData);
+        setWallet(walletData);
+        setFullName(profileData.full_name || "");
+        setUsername(profileData.username || "");
+      } else {
+        router.push("/login");
       }
-
-      setProfile(user);
-      setFullName(user.full_name || "");
-      setUsername(user.username || "");
-
-      const walletRes = await walletService.getUserWallet(user.id);
-      if (walletRes.success) {
-        setWallet(walletRes.wallet);
-      }
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error("Error loading profile:", error.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    fetchProfileData();
+  }, [fetchProfileData]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +89,7 @@ export default function ProfilePage() {
         });
       }
     } catch (error) {
+      console.error("Error updating profile:", error);
       toast({
         title: "Error",
         description: "An unexpected error occurred",
