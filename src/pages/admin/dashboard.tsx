@@ -306,7 +306,7 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-2 mb-6">
             <Calendar className="w-5 h-5 text-white/60" />
             <div className="flex gap-2">
-              {["24h", "7d", "30d", "90d", "1y"].map((period) => (
+              {(["24h", "7d", "30d", "90d", "1y"] as const).map((period) => (
                 <Button
                   key={period}
                   size="sm"
