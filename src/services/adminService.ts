@@ -11,55 +11,107 @@ export const adminService = {
     status?: string;
     kycStatus?: string;
     starRank?: string;
+    role?: string;
+    dateRange?: string;
+    sortBy?: string;
+    sortOrder?: string;
   }) {
-    let query = supabase
-      .from("profiles")
-      .select(`
-        *,
-        user_packages!user_packages_user_id_fkey(
-          id,
-          package_id,
-          amount,
-          status,
-          created_at
-        )
-      `)
-      .order("created_at", { ascending: false });
+    try {
+      // Cast to any to avoid "Type instantiation is excessively deep" error with complex Supabase queries
+      let query: any = supabase
+        .from("profiles")
+        .select(`
+          *,
+          packages:user_packages(count),
+          total_deposits:transactions(amount.sum()).eq(type, 'deposit').eq(status, 'completed'),
+          total_withdrawals:transactions(amount.sum()).eq(type, 'withdrawal').eq(status, 'completed'),
+          direct_referrals:profiles(count).eq(referred_by, id)
+        `);
 
-    // Apply search filter
-    if (filters?.search) {
-      query = query.or(
-        `full_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,referral_code.ilike.%${filters.search}%`
-      );
-    }
-
-    // Apply status filter
-    if (filters?.status && filters.status !== "all") {
-      query = query.eq("status", filters.status);
-    }
-
-    // Apply KYC filter
-    if (filters?.kycStatus && filters.kycStatus !== "all") {
-      query = query.eq("kyc_verified", filters.kycStatus === "verified");
-    }
-
-    // Apply star rank filter
-    if (filters?.starRank && filters.starRank !== "all") {
-      // Extract number from "star_X" string
-      const rankNum = parseInt(filters.starRank.replace("star_", ""));
-      if (!isNaN(rankNum)) {
-        query = query.eq("star_rank", rankNum);
+      // Search filter
+      if (filters?.search) {
+        query = query.or(`full_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,username.ilike.%${filters.search}%,referral_code.ilike.%${filters.search}%`);
       }
-    }
 
-    const { data, error } = await query;
+      // Status filter
+      if (filters?.status && filters.status !== "all") {
+        query = query.eq("status", filters.status);
+      }
 
-    if (error) {
+      // KYC filter
+      if (filters?.kycStatus && filters.kycStatus !== "all") {
+        if (filters.kycStatus === "not_verified") {
+          query = query.or("kyc_status.is.null,kyc_status.eq.not_verified");
+        } else {
+          query = query.eq("kyc_status", filters.kycStatus);
+        }
+      }
+
+      // Star rank filter
+      if (filters?.starRank && filters.starRank !== "all") {
+        // Ensure starRank is passed as a number if the column is numeric
+        // If filters.starRank is a string like "1", this works if the DB expects a number (Supabase/PostgREST handles conversion mostly, but explicit is better)
+        query = query.eq("star_rank", parseInt(filters.starRank));
+      }
+
+      // Role filter
+      if (filters?.role && filters.role !== "all") {
+        query = query.eq("role", filters.role);
+      }
+
+      // Date range filter
+      if (filters?.dateRange && filters.dateRange !== "all") {
+        const now = new Date();
+        const startDate = new Date();
+        
+        switch (filters.dateRange) {
+          case "today":
+            startDate.setHours(0, 0, 0, 0);
+            break;
+          case "week":
+            startDate.setDate(now.getDate() - 7);
+            break;
+          case "month":
+            startDate.setMonth(now.getMonth() - 1);
+            break;
+          case "quarter":
+            startDate.setMonth(now.getMonth() - 3);
+            break;
+          case "year":
+            startDate.setFullYear(now.getFullYear() - 1);
+            break;
+        }
+        
+        query = query.gte("created_at", startDate.toISOString());
+      }
+
+      // Sorting
+      const sortBy = filters?.sortBy || "date";
+      const sortOrder = filters?.sortOrder || "desc";
+      
+      switch (sortBy) {
+        case "balance":
+          query = query.order("current_balance", { ascending: sortOrder === "asc" });
+          break;
+        case "team_volume":
+          query = query.order("team_volume", { ascending: sortOrder === "asc" });
+          break;
+        case "earnings":
+          query = query.order("total_commissions", { ascending: sortOrder === "asc" });
+          break;
+        default: // date
+          query = query.order("created_at", { ascending: sortOrder === "asc" });
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
       console.error("Error fetching users:", error);
       throw error;
     }
-
-    return data || [];
   },
 
   // Get single user details

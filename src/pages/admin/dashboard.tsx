@@ -80,6 +80,10 @@ export default function AdminDashboard() {
   const [showActivityTimeline, setShowActivityTimeline] = useState(false);
   const [userActivities, setUserActivities] = useState<any[]>([]);
   const [detailedUsers, setDetailedUsers] = useState<any[]>([]);
+  const [sortBy, setSortBy] = useState<"date" | "balance" | "team_volume" | "earnings">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [dateRangeFilter, setDateRangeFilter] = useState("all");
   const revenueChartRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -91,7 +95,11 @@ export default function AdminDashboard() {
         search: searchQuery,
         status: statusFilter,
         kycStatus: kycFilter,
-        starRank: rankFilter
+        starRank: rankFilter,
+        role: roleFilter,
+        dateRange: dateRangeFilter,
+        sortBy: sortBy,
+        sortOrder: sortOrder
       };
       
       const users = await adminService.getAllUsers(filters);
@@ -108,7 +116,7 @@ export default function AdminDashboard() {
       }, 300);
       return () => clearTimeout(timeoutId);
     }
-  }, [searchQuery, statusFilter, kycFilter, rankFilter, isAdmin]);
+  }, [searchQuery, statusFilter, kycFilter, rankFilter, roleFilter, dateRangeFilter, sortBy, sortOrder, isAdmin]);
 
   useEffect(() => {
     checkAdminAuth();
@@ -747,11 +755,120 @@ export default function AdminDashboard() {
                   <SelectContent className="bg-purple-800 border-purple-600">
                     <SelectItem value="all">All Ranks</SelectItem>
                     {[1, 2, 3, 4, 5, 6, 7].map(rank => (
-                      <SelectItem key={rank} value={`star_${rank}`}>Star {rank}</SelectItem>
+                      <SelectItem key={rank} value={rank.toString()}>Star {rank}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Additional Filters Row */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                    <SelectValue placeholder="Filter by role" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-purple-800 border-purple-600">
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="master_admin">Master Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={dateRangeFilter} onValueChange={setDateRangeFilter}>
+                  <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                    <SelectValue placeholder="Registration date" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-purple-800 border-purple-600">
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="week">This Week</SelectItem>
+                    <SelectItem value="month">This Month</SelectItem>
+                    <SelectItem value="quarter">This Quarter</SelectItem>
+                    <SelectItem value="year">This Year</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                  <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-purple-800 border-purple-600">
+                    <SelectItem value="date">Registration Date</SelectItem>
+                    <SelectItem value="balance">Current Balance</SelectItem>
+                    <SelectItem value="team_volume">Team Volume</SelectItem>
+                    <SelectItem value="earnings">Total Earnings</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortOrder} onValueChange={(value: any) => setSortOrder(value)}>
+                  <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                    <SelectValue placeholder="Sort order" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-purple-800 border-purple-600">
+                    <SelectItem value="desc">Descending</SelectItem>
+                    <SelectItem value="asc">Ascending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Active Filters Display */}
+              {(searchQuery || statusFilter !== "all" || kycFilter !== "all" || rankFilter !== "all" || roleFilter !== "all" || dateRangeFilter !== "all") && (
+                <div className="flex flex-wrap gap-2 items-center p-3 bg-purple-800/30 border border-purple-600 rounded-lg">
+                  <span className="text-sm text-purple-300">Active Filters:</span>
+                  {searchQuery && (
+                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                      Search: {searchQuery}
+                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setSearchQuery("")} />
+                    </Badge>
+                  )}
+                  {statusFilter !== "all" && (
+                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                      Status: {statusFilter}
+                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setStatusFilter("all")} />
+                    </Badge>
+                  )}
+                  {kycFilter !== "all" && (
+                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                      KYC: {kycFilter}
+                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setKycFilter("all")} />
+                    </Badge>
+                  )}
+                  {rankFilter !== "all" && (
+                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                      Rank: {rankFilter.replace("_", " ")}
+                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setRankFilter("all")} />
+                    </Badge>
+                  )}
+                  {roleFilter !== "all" && (
+                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                      Role: {roleFilter}
+                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setRoleFilter("all")} />
+                    </Badge>
+                  )}
+                  {dateRangeFilter !== "all" && (
+                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                      Date: {dateRangeFilter}
+                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setDateRangeFilter("all")} />
+                    </Badge>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStatusFilter("all");
+                      setKycFilter("all");
+                      setRankFilter("all");
+                      setRoleFilter("all");
+                      setDateRangeFilter("all");
+                    }}
+                    className="text-xs text-purple-300 hover:text-white hover:bg-purple-700"
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              )}
 
               {/* Bulk Actions Bar */}
               {selectedUsers.length > 0 && (
