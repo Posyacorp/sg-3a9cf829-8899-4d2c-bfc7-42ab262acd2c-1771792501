@@ -57,6 +57,47 @@ export type Database = {
           },
         ]
       }
+      filter_presets: {
+        Row: {
+          created_at: string | null
+          filters: Json
+          id: string
+          is_default: boolean | null
+          is_public: boolean | null
+          preset_name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          filters: Json
+          id?: string
+          is_default?: boolean | null
+          is_public?: boolean | null
+          preset_name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          is_default?: boolean | null
+          is_public?: boolean | null
+          preset_name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filter_presets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fraud_alerts: {
         Row: {
           alert_type: string
@@ -226,6 +267,44 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          message: string
+          read: boolean | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message: string
+          read?: boolean | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message?: string
+          read?: boolean | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1006,6 +1085,10 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      update_wallet_balance: {
+        Args: { p_amount: number; p_user_id: string; p_wallet_type: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

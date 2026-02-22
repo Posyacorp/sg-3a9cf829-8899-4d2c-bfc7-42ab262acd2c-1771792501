@@ -4,36 +4,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Calendar,
-  Users,
-  DollarSign,
-  TrendingUp,
-  Package,
-  Activity,
-  Download,
-  FileText,
-  Table,
-  Eye,
-  EyeOff,
-  Copy,
-  Mail,
-  Search,
-  Filter,
-  CheckSquare,
-  X,
-  BarChart3,
-  Shield,
-  UserCog,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Clock,
-} from "lucide-react";
 import {
   LineChart,
   Line,
@@ -61,6 +35,33 @@ import {
 } from "@/lib/exportUtils";
 import { useRouter } from "next/router";
 import { authService } from "@/services/authService";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Users,
+  Package,
+  DollarSign,
+  TrendingUp,
+  Eye,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Activity,
+  Shield,
+  Search,
+  Download,
+  Settings,
+  BarChart3,
+  FileText,
+  Trash2,
+  X,
+  Star,
+  Bookmark,
+  Save,
+  Globe,
+  Play,
+  Table,
+} from "lucide-react";
 
 type Period = "24h" | "7d" | "30d" | "90d" | "1y";
 
@@ -86,31 +87,64 @@ export default function AdminDashboard() {
   const [dateRangeFilter, setDateRangeFilter] = useState("all");
   const revenueChartRef = useRef(null);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null); // Renamed from user to avoid confusion
   const [isAdmin, setIsAdmin] = useState(false);
+  const [users, setUsers] = useState<any[]>([]); // Added users state
+  const [showBulkActionModal, setShowBulkActionModal] = useState(false); // Added missing state
+
+  // New bulk action states
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkModalType, setBulkModalType] = useState<"credit" | "debit" | "kyc" | "role" | "rank" | "2fa" | "notify" | null>(null);
+  const [bulkAmount, setBulkAmount] = useState<string | number>("");
+  const [bulkWalletType, setBulkWalletType] = useState("main_wallet");
+  const [bulkKycStatus, setBulkKycStatus] = useState("verified");
+  const [bulkRole, setBulkRole] = useState("user");
+  const [bulkStarRank, setBulkStarRank] = useState("1");
+  const [bulk2FAEnabled, setBulk2FAEnabled] = useState(true);
+  const [bulkNotificationTitle, setBulkNotificationTitle] = useState("");
+  const [bulkNotificationMessage, setBulkNotificationMessage] = useState("");
+
+  // Filter Preset states
+  const [filterPresets, setFilterPresets] = useState<any[]>([]);
+  const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
+  const [showManagePresetsDialog, setShowManagePresetsDialog] = useState(false);
+  const [newPresetName, setNewPresetName] = useState("");
+  const [newPresetIsPublic, setNewPresetIsPublic] = useState(false);
+  const [editingPreset, setEditingPreset] = useState<any>(null);
 
   const fetchUsers = async () => {
     try {
       const filters = {
         search: searchQuery,
-        status: statusFilter,
-        kycStatus: kycFilter,
-        starRank: rankFilter,
-        role: roleFilter,
-        dateRange: dateRangeFilter,
-        sortBy: sortBy,
-        sortOrder: sortOrder
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        kycStatus: kycFilter !== "all" ? kycFilter : undefined,
+        starRank: rankFilter !== "all" ? rankFilter : undefined,
+        role: roleFilter !== "all" ? roleFilter : undefined,
+        dateRange: dateRangeFilter !== "all" ? dateRangeFilter : undefined,
+        sortBy,
+        sortOrder,
       };
-      
       const users = await adminService.getAllUsers(filters);
-      setDetailedUsers(users);
+      setUsers(users);
     } catch (error) {
       console.error("Error fetching users:", error);
     }
   };
 
+  // Fetch filter presets
+  const fetchFilterPresets = async () => {
+    if (!currentUser?.id) return;
+    try {
+      const presets = await adminService.getFilterPresets(currentUser.id);
+      setFilterPresets(presets);
+    } catch (error) {
+      console.error("Error fetching filter presets:", error);
+    }
+  };
+
   useEffect(() => {
     if (isAdmin) {
+      fetchFilterPresets();
       const timeoutId = setTimeout(() => {
         fetchUsers();
       }, 300);
@@ -196,16 +230,64 @@ export default function AdminDashboard() {
     }
 
     try {
-      if (bulkAction === "activate" || bulkAction === "suspend") {
-        await adminService.bulkUpdateStatus(selectedUsers, bulkAction === "activate" ? "active" : "suspended");
-        alert(`${selectedUsers.length} users ${bulkAction}d successfully`);
-      } else if (bulkAction === "delete") {
-        if (confirm(`Are you sure you want to delete ${selectedUsers.length} users? This cannot be undone.`)) {
-          await adminService.bulkDeleteUsers(selectedUsers);
-          alert(`${selectedUsers.length} users deleted successfully`);
-        }
-      } else if (bulkAction === "export") {
-        handleExportSelected();
+      switch (bulkAction) {
+        case "activate":
+        case "suspend":
+          await adminService.bulkUpdateStatus(selectedUsers, bulkAction === "activate" ? "active" : "suspended");
+          alert(`${selectedUsers.length} users ${bulkAction}d successfully`);
+          break;
+        
+        case "delete":
+          if (confirm(`Are you sure you want to delete ${selectedUsers.length} users? This cannot be undone.`)) {
+            await adminService.bulkDeleteUsers(selectedUsers);
+            alert(`${selectedUsers.length} users deleted successfully`);
+          } else {
+            return;
+          }
+          break;
+        
+        case "export":
+          handleExportSelected();
+          return; // Don't refresh or clear selection
+        
+        case "verify_kyc":
+          setBulkModalType("kyc");
+          setShowBulkModal(true);
+          return;
+        
+        case "change_role":
+          setBulkModalType("role");
+          setShowBulkModal(true);
+          return;
+        
+        case "update_rank":
+          setBulkModalType("rank");
+          setShowBulkModal(true);
+          return;
+        
+        case "toggle_2fa":
+          setBulkModalType("2fa");
+          setShowBulkModal(true);
+          return;
+        
+        case "credit_wallet":
+          setBulkModalType("credit");
+          setShowBulkModal(true);
+          return;
+        
+        case "debit_wallet":
+          setBulkModalType("debit");
+          setShowBulkModal(true);
+          return;
+        
+        case "send_notification":
+          setBulkModalType("notify");
+          setShowBulkModal(true);
+          return;
+        
+        default:
+          alert("Unknown action");
+          return;
       }
       
       setSelectedUsers([]);
@@ -214,6 +296,281 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error("Error executing bulk action:", error);
       alert("Failed to execute bulk action");
+    }
+  };
+
+  const handleBulkModalAction = async () => {
+    try {
+      setShowBulkActionModal(false);
+
+      switch (bulkAction) {
+        case "activate":
+          await adminService.bulkUpdateStatus(selectedUsers, "active");
+          break;
+        case "suspend":
+          await adminService.bulkUpdateStatus(selectedUsers, "suspended");
+          break;
+        case "ban":
+          await adminService.bulkUpdateStatus(selectedUsers, "banned");
+          break;
+        case "verify_kyc":
+          await adminService.bulkUpdateKYCStatus(selectedUsers, "verified");
+          break;
+        case "reject_kyc":
+          await adminService.bulkUpdateKYCStatus(selectedUsers, "rejected");
+          break;
+        case "reset_kyc":
+          await adminService.bulkUpdateKYCStatus(selectedUsers, "not_verified");
+          break;
+        case "promote_admin":
+          await adminService.bulkUpdateRole(selectedUsers, "admin");
+          break;
+        case "promote_master":
+          await adminService.bulkUpdateRole(selectedUsers, "master_admin");
+          break;
+        case "demote_user":
+          await adminService.bulkUpdateRole(selectedUsers, "user");
+          break;
+        case "credit":
+          if (!bulkAmount || Number(bulkAmount) <= 0) {
+            alert("Please enter a valid amount");
+            return;
+          }
+          await adminService.bulkCreditWallet(selectedUsers, Number(bulkAmount), bulkWalletType);
+          alert(`${bulkAmount} SUI credited to ${bulkWalletType} for ${selectedUsers.length} users`);
+          break;
+        
+        case "debit":
+          if (!bulkAmount || Number(bulkAmount) <= 0) {
+            alert("Please enter a valid amount");
+            return;
+          }
+          await adminService.bulkDebitWallet(selectedUsers, Number(bulkAmount), bulkWalletType);
+          alert(`${bulkAmount} SUI debited from ${bulkWalletType} for ${selectedUsers.length} users`);
+          break;
+        
+        case "enable_2fa":
+          await adminService.bulkToggle2FA(selectedUsers, true);
+          break;
+        case "disable_2fa":
+          await adminService.bulkToggle2FA(selectedUsers, false);
+          break;
+        case "update_rank":
+          if (bulkStarRank) {
+            await adminService.bulkUpdateStarRank(selectedUsers, parseInt(bulkStarRank));
+          }
+          break;
+        case "send_notification":
+          if (bulkNotificationTitle && bulkNotificationMessage) {
+            await adminService.bulkSendNotification(
+              selectedUsers,
+              bulkNotificationTitle,
+              bulkNotificationMessage
+            );
+          }
+          break;
+        case "delete":
+          await adminService.bulkDeleteUsers(selectedUsers);
+          break;
+      }
+
+      // Reset states
+      setSelectedUsers([]);
+      setBulkAction("");
+      setBulkAmount("");
+      setBulkWalletType("");
+      setBulkStarRank("");
+      setBulkNotificationTitle("");
+      setBulkNotificationMessage("");
+      
+      // Refresh users
+      fetchUsers();
+      alert("Bulk action completed successfully!");
+    } catch (error) {
+      console.error("Error executing bulk modal action:", error);
+      alert("Failed to execute action");
+    }
+  };
+
+  // ==================== FILTER PRESET HANDLERS ====================
+
+  // Apply a saved preset
+  const applyFilterPreset = (preset: any) => {
+    const filters = preset.filters;
+    setSearchQuery(filters.search || "");
+    setStatusFilter(filters.statusFilter || "all");
+    setKycFilter(filters.kycFilter || "all");
+    setRankFilter(filters.rankFilter || "all");
+    setRoleFilter(filters.roleFilter || "all");
+    setDateRangeFilter(filters.dateRangeFilter || "all");
+    setSortBy(filters.sortBy || "created_at");
+    setSortOrder(filters.sortOrder || "desc");
+  };
+
+  // Save current filters as a preset
+  const handleSavePreset = async () => {
+    if (!newPresetName.trim() || !currentUser?.id) {
+      alert("Please enter a preset name");
+      return;
+    }
+
+    try {
+      const currentFilters = {
+        search: searchQuery,
+        statusFilter,
+        kycFilter,
+        rankFilter,
+        roleFilter,
+        dateRangeFilter,
+        sortBy,
+        sortOrder,
+      };
+
+      await adminService.saveFilterPreset(
+        currentUser.id,
+        newPresetName,
+        currentFilters,
+        newPresetIsPublic
+      );
+
+      setShowSavePresetDialog(false);
+      setNewPresetName("");
+      setNewPresetIsPublic(false);
+      fetchFilterPresets();
+      alert("Filter preset saved successfully!");
+    } catch (error) {
+      console.error("Error saving preset:", error);
+      alert("Failed to save preset");
+    }
+  };
+
+  // Update an existing preset
+  const handleUpdatePreset = async (presetId: string, updates: any) => {
+    try {
+      await adminService.updateFilterPreset(presetId, updates);
+      fetchFilterPresets();
+      alert("Preset updated successfully!");
+    } catch (error) {
+      console.error("Error updating preset:", error);
+      alert("Failed to update preset");
+    }
+  };
+
+  // Delete a preset
+  const handleDeletePreset = async (presetId: string) => {
+    if (!confirm("Are you sure you want to delete this preset?")) return;
+
+    try {
+      await adminService.deleteFilterPreset(presetId);
+      fetchFilterPresets();
+      alert("Preset deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting preset:", error);
+      alert("Failed to delete preset");
+    }
+  };
+
+  // Set a preset as default
+  const handleSetDefaultPreset = async (presetId: string) => {
+    if (!currentUser?.id) return;
+
+    try {
+      await adminService.setDefaultPreset(currentUser.id, presetId);
+      fetchFilterPresets();
+      alert("Default preset updated!");
+    } catch (error) {
+      console.error("Error setting default preset:", error);
+      alert("Failed to set default preset");
+    }
+  };
+
+  // Get currently active filter count
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (searchQuery) count++;
+    if (statusFilter !== "all") count++;
+    if (kycFilter !== "all") count++;
+    if (rankFilter !== "all") count++;
+    if (roleFilter !== "all") count++;
+    if (dateRangeFilter !== "all") count++;
+    return count;
+  };
+
+  const handleSuspendUser = async (userId: string) => {
+    try {
+      const newStatus = "suspended";
+      await adminService.updateUserStatus(userId, newStatus);
+      alert("User suspended successfully");
+      fetchUsers();
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update user status");
+    }
+  };
+
+  const executeBulkModalAction = async () => {
+    try {
+      switch (bulkModalType) {
+        case "kyc":
+          await adminService.bulkVerifyKYC(selectedUsers, bulkKycStatus);
+          alert(`KYC status updated to "${bulkKycStatus}" for ${selectedUsers.length} users`);
+          break;
+        
+        case "role":
+          await adminService.bulkChangeRole(selectedUsers, bulkRole);
+          alert(`Role changed to "${bulkRole}" for ${selectedUsers.length} users`);
+          break;
+        
+        case "rank":
+          await adminService.bulkUpdateStarRank(selectedUsers, parseInt(bulkStarRank));
+          alert(`Star rank updated to ${bulkStarRank} for ${selectedUsers.length} users`);
+          break;
+        
+        case "2fa":
+          await adminService.bulkToggle2FA(selectedUsers, bulk2FAEnabled);
+          alert(`2FA ${bulk2FAEnabled ? "enabled" : "disabled"} for ${selectedUsers.length} users`);
+          break;
+        
+        case "credit":
+          if (!bulkAmount || Number(bulkAmount) <= 0) {
+            alert("Please enter a valid amount");
+            return;
+          }
+          await adminService.bulkCreditWallet(selectedUsers, Number(bulkAmount), bulkWalletType);
+          alert(`${bulkAmount} SUI credited to ${bulkWalletType} for ${selectedUsers.length} users`);
+          break;
+        
+        case "debit":
+          if (!bulkAmount || Number(bulkAmount) <= 0) {
+            alert("Please enter a valid amount");
+            return;
+          }
+          await adminService.bulkDebitWallet(selectedUsers, Number(bulkAmount), bulkWalletType);
+          alert(`${bulkAmount} SUI debited from ${bulkWalletType} for ${selectedUsers.length} users`);
+          break;
+        
+        case "notify":
+          if (!bulkNotificationTitle || !bulkNotificationMessage) {
+            alert("Please enter both title and message");
+            return;
+          }
+          await adminService.bulkSendNotification(selectedUsers, bulkNotificationTitle, bulkNotificationMessage);
+          alert(`Notification sent to ${selectedUsers.length} users`);
+          break;
+      }
+
+      // Reset and refresh
+      setShowBulkModal(false);
+      setBulkModalType(null);
+      setSelectedUsers([]);
+      setBulkAction("");
+      setBulkAmount("");
+      setBulkNotificationTitle("");
+      setBulkNotificationMessage("");
+      fetchUsers();
+    } catch (error) {
+      console.error("Error executing bulk modal action:", error);
+      alert("Failed to execute action");
     }
   };
 
@@ -814,47 +1171,47 @@ export default function AdminDashboard() {
 
               {/* Active Filters Display */}
               {(searchQuery || statusFilter !== "all" || kycFilter !== "all" || rankFilter !== "all" || roleFilter !== "all" || dateRangeFilter !== "all") && (
-                <div className="flex flex-wrap gap-2 items-center p-3 bg-purple-800/30 border border-purple-600 rounded-lg">
-                  <span className="text-sm text-purple-300">Active Filters:</span>
+                <div className="flex flex-wrap items-center gap-2 p-4 bg-muted/30 rounded-lg border">
+                  <span className="text-sm font-medium">Active Filters:</span>
                   {searchQuery && (
-                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                    <Badge variant="secondary" className="gap-1">
                       Search: {searchQuery}
-                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setSearchQuery("")} />
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setSearchQuery("")} />
                     </Badge>
                   )}
                   {statusFilter !== "all" && (
-                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                    <Badge variant="secondary" className="gap-1">
                       Status: {statusFilter}
-                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setStatusFilter("all")} />
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setStatusFilter("all")} />
                     </Badge>
                   )}
                   {kycFilter !== "all" && (
-                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                    <Badge variant="secondary" className="gap-1">
                       KYC: {kycFilter}
-                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setKycFilter("all")} />
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setKycFilter("all")} />
                     </Badge>
                   )}
                   {rankFilter !== "all" && (
-                    <Badge variant="outline" className="border-purple-400 text-purple-200">
-                      Rank: {rankFilter.replace("_", " ")}
-                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setRankFilter("all")} />
+                    <Badge variant="secondary" className="gap-1">
+                      Rank: Star {rankFilter}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setRankFilter("all")} />
                     </Badge>
                   )}
                   {roleFilter !== "all" && (
-                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                    <Badge variant="secondary" className="gap-1">
                       Role: {roleFilter}
-                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setRoleFilter("all")} />
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setRoleFilter("all")} />
                     </Badge>
                   )}
                   {dateRangeFilter !== "all" && (
-                    <Badge variant="outline" className="border-purple-400 text-purple-200">
+                    <Badge variant="secondary" className="gap-1">
                       Date: {dateRangeFilter}
-                      <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => setDateRangeFilter("all")} />
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setDateRangeFilter("all")} />
                     </Badge>
                   )}
                   <Button
-                    size="sm"
                     variant="ghost"
+                    size="sm"
                     onClick={() => {
                       setSearchQuery("");
                       setStatusFilter("all");
@@ -863,26 +1220,86 @@ export default function AdminDashboard() {
                       setRoleFilter("all");
                       setDateRangeFilter("all");
                     }}
-                    className="text-xs text-purple-300 hover:text-white hover:bg-purple-700"
+                    className="h-7"
                   >
                     Clear All
                   </Button>
                 </div>
               )}
 
+              {/* Filter Presets Section */}
+              <div className="flex flex-wrap items-center gap-3 p-4 bg-gradient-to-r from-primary/5 to-purple-500/5 rounded-lg border border-primary/20">
+                <div className="flex items-center gap-2">
+                  <Bookmark className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold">Quick Filters:</span>
+                </div>
+                
+                {/* Preset Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {filterPresets.slice(0, 6).map((preset) => (
+                    <Button
+                      key={preset.id}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyFilterPreset(preset)}
+                      className="h-8 gap-2 hover:bg-primary/10 hover:border-primary/50"
+                    >
+                      {preset.is_default && <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />}
+                      {preset.is_public && <Globe className="h-3 w-3 text-muted-foreground" />}
+                      {preset.preset_name}
+                    </Button>
+                  ))}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 ml-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowSavePresetDialog(true)}
+                    className="h-8 gap-2"
+                    disabled={getActiveFilterCount() === 0}
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Current
+                    {getActiveFilterCount() > 0 && (
+                      <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center">
+                        {getActiveFilterCount()}
+                      </Badge>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowManagePresetsDialog(true)}
+                    className="h-8 gap-2"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Manage ({filterPresets.length})
+                  </Button>
+                </div>
+              </div>
+
               {/* Bulk Actions Bar */}
               {selectedUsers.length > 0 && (
                 <div className="flex items-center gap-4 p-4 bg-purple-800/50 border border-purple-600 rounded-lg">
                   <span className="text-purple-200">{selectedUsers.length} users selected</span>
                   <Select value={bulkAction} onValueChange={setBulkAction}>
-                    <SelectTrigger className="w-48 bg-purple-700 border-purple-500 text-white">
+                    <SelectTrigger className="w-64 bg-purple-700 border-purple-500 text-white">
                       <SelectValue placeholder="Select action..." />
                     </SelectTrigger>
                     <SelectContent className="bg-purple-800 border-purple-600">
-                      <SelectItem value="activate">Activate</SelectItem>
-                      <SelectItem value="suspend">Suspend</SelectItem>
-                      <SelectItem value="export">Export Selected</SelectItem>
-                      <SelectItem value="delete">Delete</SelectItem>
+                      <SelectItem value="activate">✅ Activate Users</SelectItem>
+                      <SelectItem value="suspend">🚫 Suspend Users</SelectItem>
+                      <SelectItem value="verify_kyc">✓ Verify KYC</SelectItem>
+                      <SelectItem value="change_role">👤 Change Role</SelectItem>
+                      <SelectItem value="update_rank">⭐ Update Star Rank</SelectItem>
+                      <SelectItem value="toggle_2fa">🔐 Toggle 2FA</SelectItem>
+                      <SelectItem value="credit_wallet">💰 Credit Wallets</SelectItem>
+                      <SelectItem value="debit_wallet">💸 Debit Wallets</SelectItem>
+                      <SelectItem value="send_notification">📧 Send Notification</SelectItem>
+                      <SelectItem value="export">📥 Export Selected</SelectItem>
+                      <SelectItem value="delete">🗑️ Delete Users</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
@@ -1076,431 +1493,332 @@ export default function AdminDashboard() {
               </div>
             </div>
           </Card>
-        </div>
 
-        {/* User Details Dialog */}
-        <Dialog open={showUserModal} onOpenChange={setShowUserModal}>
-          <DialogContent className="max-w-4xl bg-purple-900 border-purple-700 text-white max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
-                User Details: {selectedUser?.full_name}
-              </DialogTitle>
-            </DialogHeader>
-            {selectedUser && (
+          {/* Bulk Action Modal */}
+          <Dialog open={showBulkModal} onOpenChange={setShowBulkModal}>
+            <DialogContent className="bg-purple-900 border-purple-700 text-white">
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                  {bulkModalType === "credit" && "Bulk Credit Wallets"}
+                  {bulkModalType === "debit" && "Bulk Debit Wallets"}
+                  {bulkModalType === "kyc" && "Bulk Verify KYC"}
+                  {bulkModalType === "role" && "Bulk Change Role"}
+                  {bulkModalType === "rank" && "Bulk Update Star Rank"}
+                  {bulkModalType === "2fa" && "Bulk Toggle 2FA"}
+                  {bulkModalType === "notify" && "Send Bulk Notification"}
+                </DialogTitle>
+              </DialogHeader>
+
               <div className="space-y-4">
-                {/* Account Information */}
-                <Card className="p-4 bg-purple-800/50 border-purple-700">
-                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Account Information
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                <Alert className="bg-purple-800/50 border-purple-600">
+                  <AlertDescription>
+                    This action will affect <strong>{selectedUsers.length}</strong> selected users
+                  </AlertDescription>
+                </Alert>
+
+                {(bulkModalType === "credit" || bulkModalType === "debit") && (
+                  <>
                     <div>
-                      <span className="text-purple-300">User ID:</span>
-                      <p className="font-mono text-xs">{selectedUser.id}</p>
+                      <label className="text-sm text-purple-300 mb-2 block">Amount (SUI)</label>
+                      <Input
+                        type="number"
+                        placeholder="Enter amount"
+                        value={bulkAmount}
+                        onChange={(e) => setBulkAmount(e.target.value)}
+                        className="bg-purple-800/50 border-purple-600 text-white"
+                      />
                     </div>
                     <div>
-                      <span className="text-purple-300">Email:</span>
-                      <p>{selectedUser.email}</p>
+                      <label className="text-sm text-purple-300 mb-2 block">Wallet Type</label>
+                      <Select value={bulkWalletType} onValueChange={setBulkWalletType}>
+                        <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-purple-800 border-purple-600">
+                          <SelectItem value="main_wallet">Main Wallet</SelectItem>
+                          <SelectItem value="roi_wallet">ROI Wallet</SelectItem>
+                          <SelectItem value="earning_wallet">Earning Wallet</SelectItem>
+                          <SelectItem value="p2p_wallet">P2P Wallet</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div>
-                      <span className="text-purple-300">Phone:</span>
-                      <p>{selectedUser.phone || "N/A"}</p>
-                    </div>
-                    <div>
-                      <span className="text-purple-300">Registration Date:</span>
-                      <p>{new Date(selectedUser.created_at).toLocaleDateString()}</p>
-                    </div>
-                    <div>
-                      <span className="text-purple-300">Last Login:</span>
-                      <p>{selectedUser.last_login ? new Date(selectedUser.last_login).toLocaleString() : "N/A"}</p>
-                    </div>
-                    <div>
-                      <span className="text-purple-300">IP Address:</span>
-                      <p>{selectedUser.last_ip_address || "N/A"}</p>
-                    </div>
+                  </>
+                )}
+
+                {bulkModalType === "kyc" && (
+                  <div>
+                    <label className="text-sm text-purple-300 mb-2 block">KYC Status</label>
+                    <Select value={bulkKycStatus} onValueChange={setBulkKycStatus}>
+                      <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-purple-800 border-purple-600">
+                        <SelectItem value="verified">Verified</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </Card>
+                )}
 
-                {/* Financial Summary */}
-                <Card className="p-4">
-                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-green-400" />
-                    Financial Summary
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Total Deposits:</span>
-                      <span className="font-semibold">{selectedUser.total_deposits.toLocaleString()} SUI</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Total Withdrawals:</span>
-                      <span className="font-semibold">{selectedUser.total_withdrawals.toLocaleString()} SUI</span>
-                    </div>
-                    <div className="flex justify-between border-t border-gray-700 pt-2">
-                      <span className="text-gray-400">Current Balance:</span>
-                      <span className="font-bold text-blue-400">{selectedUser.current_balance.toLocaleString()} SUI</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">USD Equivalent:</span>
-                      <span className="text-gray-500">${(selectedUser.current_balance * 3.5).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Active Packages:</span>
-                      <span className="font-semibold">{selectedUser.active_packages}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Total Commissions:</span>
-                      <span className="font-semibold text-green-400">{selectedUser.total_commissions.toLocaleString()} SUI</span>
-                    </div>
+                {bulkModalType === "role" && (
+                  <div>
+                    <label className="text-sm text-purple-300 mb-2 block">New Role</label>
+                    <Select value={bulkRole} onValueChange={setBulkRole}>
+                      <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-purple-800 border-purple-600">
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="master_admin">Master Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </Card>
+                )}
 
-                {/* Security Management */}
-                <Card className="p-4 bg-purple-800/50 border-purple-700">
-                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                    <Shield className="h-5 w-5" />
-                    Security & Fraud Management
-                  </h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">Two-Factor Authentication</p>
-                        <p className="text-xs text-purple-300">
-                          {selectedUser.two_factor_enabled ? "Currently enabled" : "Currently disabled"}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleToggle2FA(selectedUser.id, selectedUser.two_factor_enabled)}
-                        className={
-                          selectedUser.two_factor_enabled
-                            ? "bg-red-600 hover:bg-red-700"
-                            : "bg-green-600 hover:bg-green-700"
-                        }
-                      >
-                        {selectedUser.two_factor_enabled ? "Disable 2FA" : "Enable 2FA"}
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">Fraud Risk Score</p>
-                        <p className="text-xs text-purple-300">
-                          Current score: {selectedUser.fraud_score || 0}/100
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleRunFraudDetection(selectedUser.id)}
-                        className="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700"
-                      >
-                        <Shield className="h-4 w-4 mr-2" />
-                        Run Fraud Detection
-                      </Button>
-                    </div>
-
-                    {selectedUser.is_flagged_for_review && (
-                      <Alert className="bg-red-900/50 border-red-700">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription>
-                          This user has been flagged for review due to suspicious activity patterns.
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                {bulkModalType === "rank" && (
+                  <div>
+                    <label className="text-sm text-purple-300 mb-2 block">Star Rank</label>
+                    <Select value={bulkStarRank} onValueChange={setBulkStarRank}>
+                      <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-purple-800 border-purple-600">
+                        {[1, 2, 3, 4, 5, 6, 7].map(rank => (
+                          <SelectItem key={rank} value={rank.toString()}>Star {rank}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </Card>
+                )}
 
-                {/* Password Management */}
-                <Card className="p-4 bg-purple-800/50 border-purple-700">
-                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                    <Eye className="h-5 w-5" />
-                    Password Management
-                  </h4>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-sm text-purple-300">Current Password Hash:</label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          type={showPassword ? "text" : "password"}
-                          value={selectedUser.password_hash || "hashed_password_***"}
-                          readOnly
-                          className="bg-purple-700/50 border-purple-600 text-white"
-                        />
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="border-purple-500"
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-purple-300">Reset Password:</label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          type="password"
-                          placeholder="Enter new password (min 6 chars)"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          className="bg-purple-700/50 border-purple-600 text-white"
-                        />
-                        <Button
-                          onClick={handlePasswordReset}
-                          className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                        >
-                          Reset
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <Button
-                        onClick={handleSendResetEmail}
-                        variant="outline"
-                        className="w-full border-purple-400 text-purple-300 hover:bg-purple-800"
-                      >
-                        <Mail className="h-4 w-4 mr-2" />
-                        Send Password Reset Email
-                      </Button>
-                    </div>
+                {bulkModalType === "2fa" && (
+                  <div>
+                    <label className="text-sm text-purple-300 mb-2 block">2FA Action</label>
+                    <Select value={bulk2FAEnabled ? "enable" : "disable"} onValueChange={(val) => setBulk2FAEnabled(val === "enable")}>
+                      <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-purple-800 border-purple-600">
+                        <SelectItem value="enable">Enable 2FA</SelectItem>
+                        <SelectItem value="disable">Disable 2FA</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </Card>
+                )}
 
-                {/* Referral Information */}
-                <Card className="p-4 bg-purple-800/50 border-purple-700">
-                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Referral Information
-                  </h4>
-                  <div className="space-y-3">
+                {bulkModalType === "notify" && (
+                  <>
                     <div>
-                      <label className="text-sm text-purple-300">Referral Code:</label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          value={selectedUser.referral_code || "N/A"}
-                          readOnly
-                          className="bg-purple-700/50 border-purple-600 text-white"
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyToClipboard(selectedUser.referral_code, "Referral code")}
-                          className="border-purple-500"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-purple-300">Referral Link:</label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          value={`https://sui24.trade?ref=${selectedUser.referral_code}`}
-                          readOnly
-                          className="bg-purple-700/50 border-purple-600 text-white"
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyToClipboard(`https://sui24.trade?ref=${selectedUser.referral_code}`, "Referral link")}
-                          className="border-purple-500"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3 text-sm">
-                      <div>
-                        <span className="text-purple-300">Direct Referrals:</span>
-                        <p className="font-semibold text-lg">{selectedUser.direct_referrals || 0}</p>
-                      </div>
-                      <div>
-                        <span className="text-purple-300">Total Team Size:</span>
-                        <p className="font-semibold text-lg">{selectedUser.team_size || 0}</p>
-                      </div>
-                      <div>
-                        <span className="text-purple-300">Team Volume:</span>
-                        <p className="font-semibold text-lg text-green-400">${selectedUser.team_volume || 0}</p>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* MLM Performance */}
-                <Card className="p-4 bg-purple-800/50 border-purple-700">
-                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    MLM Performance
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-purple-300">Star Rank:</span>
-                      <p className="font-semibold text-lg text-yellow-400">{selectedUser.star_rank || "N/A"}</p>
+                      <label className="text-sm text-purple-300 mb-2 block">Notification Title</label>
+                      <Input
+                        placeholder="Enter title"
+                        value={bulkNotificationTitle}
+                        onChange={(e) => setBulkNotificationTitle(e.target.value)}
+                        className="bg-purple-800/50 border-purple-600 text-white"
+                      />
                     </div>
                     <div>
-                      <span className="text-purple-300">Total Commissions Earned:</span>
-                      <p className="font-semibold text-lg text-green-400">${selectedUser.total_commissions || 0}</p>
+                      <label className="text-sm text-purple-300 mb-2 block">Message</label>
+                      <textarea
+                        placeholder="Enter message"
+                        value={bulkNotificationMessage}
+                        onChange={(e) => setBulkNotificationMessage(e.target.value)}
+                        rows={4}
+                        className="w-full p-3 bg-purple-800/50 border border-purple-600 text-white rounded-lg"
+                      />
                     </div>
-                  </div>
-                </Card>
+                  </>
+                )}
 
-                {/* Admin Actions */}
-                <Card className="p-4 bg-purple-800/50 border-purple-700">
-                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                    <UserCog className="h-5 w-5" />
-                    Admin Actions
-                  </h4>
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={() => handleImpersonateUser(selectedUser.id)}
-                      className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
-                    >
-                      <UserCog className="h-4 w-4 mr-2" />
-                      Login as User (Impersonate)
-                    </Button>
-                    <Button
-                      onClick={() => handleStatusToggle(selectedUser.id, selectedUser.status)}
-                      className={
-                        selectedUser.status === "active"
-                          ? "flex-1 bg-red-600 hover:bg-red-700"
-                          : "flex-1 bg-green-600 hover:bg-green-700"
-                      }
-                    >
-                      {selectedUser.status === "active" ? "Suspend Account" : "Activate Account"}
-                    </Button>
-                  </div>
-                </Card>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Activity Timeline Dialog */}
-        <Dialog open={showActivityTimeline} onOpenChange={setShowActivityTimeline}>
-          <DialogContent className="max-w-4xl bg-purple-900 border-purple-700 text-white max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
-                Activity Timeline: {selectedUser?.full_name}
-              </DialogTitle>
-            </DialogHeader>
-            {selectedUser && (
-              <div className="space-y-4">
-                {/* User Quick Stats */}
-                <div className="grid grid-cols-3 gap-4">
-                  <Card className="p-4 bg-purple-800/50 border-purple-700">
-                    <p className="text-sm text-purple-300">Total Deposits</p>
-                    <p className="text-2xl font-bold text-green-400">${selectedUser.total_deposits || 0}</p>
-                  </Card>
-                  <Card className="p-4 bg-purple-800/50 border-purple-700">
-                    <p className="text-sm text-purple-300">Total Commissions</p>
-                    <p className="text-2xl font-bold text-purple-400">${selectedUser.total_commissions || 0}</p>
-                  </Card>
-                  <Card className="p-4 bg-purple-800/50 border-purple-700">
-                    <p className="text-sm text-purple-300">Direct Referrals</p>
-                    <p className="text-2xl font-bold text-pink-400">{selectedUser.direct_referrals || 0}</p>
-                  </Card>
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    onClick={executeBulkModalAction}
+                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    Execute Action
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowBulkModal(false);
+                      setBulkModalType(null);
+                    }}
+                    variant="outline"
+                    className="border-purple-400 text-purple-300 hover:bg-purple-800"
+                  >
+                    Cancel
+                  </Button>
                 </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
-                {/* Activity Breakdown */}
-                <Card className="p-4 bg-purple-800/50 border-purple-700">
-                  <h4 className="text-lg font-semibold mb-3">Activity Breakdown</h4>
-                  <div className="grid grid-cols-4 gap-3 text-sm">
-                    <div>
-                      <p className="text-purple-300">Logins</p>
-                      <p className="font-semibold">{userActivities.filter(a => a.activity_type === "login").length}</p>
-                    </div>
-                    <div>
-                      <p className="text-purple-300">Deposits</p>
-                      <p className="font-semibold">{userActivities.filter(a => a.activity_type === "deposit").length}</p>
-                    </div>
-                    <div>
-                      <p className="text-purple-300">ROI Claims</p>
-                      <p className="font-semibold">{userActivities.filter(a => a.activity_type === "roi_claim").length}</p>
-                    </div>
-                    <div>
-                      <p className="text-purple-300">Withdrawals</p>
-                      <p className="font-semibold">{userActivities.filter(a => a.activity_type === "withdrawal").length}</p>
-                    </div>
+          {/* Save Filter Preset Dialog */}
+          <Dialog open={showSavePresetDialog} onOpenChange={setShowSavePresetDialog}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Save Filter Preset</DialogTitle>
+                <DialogDescription>
+                  Save your current filter combination for quick access later.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Preset Name</Label>
+                  <Input
+                    value={newPresetName}
+                    onChange={(e) => setNewPresetName(e.target.value)}
+                    placeholder="e.g., High Value Suspended Users"
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="preset-public"
+                    checked={newPresetIsPublic}
+                    onCheckedChange={(checked) => setNewPresetIsPublic(checked as boolean)}
+                  />
+                  <Label htmlFor="preset-public" className="text-sm cursor-pointer">
+                    Make this preset public (visible to all admins)
+                  </Label>
+                </div>
+                <div className="p-3 bg-muted rounded-lg space-y-1">
+                  <p className="text-sm font-medium">Current Filters:</p>
+                  {searchQuery && <p className="text-xs text-muted-foreground">• Search: {searchQuery}</p>}
+                  {statusFilter !== "all" && <p className="text-xs text-muted-foreground">• Status: {statusFilter}</p>}
+                  {kycFilter !== "all" && <p className="text-xs text-muted-foreground">• KYC: {kycFilter}</p>}
+                  {rankFilter !== "all" && <p className="text-xs text-muted-foreground">• Rank: Star {rankFilter}</p>}
+                  {roleFilter !== "all" && <p className="text-xs text-muted-foreground">• Role: {roleFilter}</p>}
+                  {dateRangeFilter !== "all" && <p className="text-xs text-muted-foreground">• Date: {dateRangeFilter}</p>}
+                  <p className="text-xs text-muted-foreground">• Sort: {sortBy} ({sortOrder})</p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowSavePresetDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSavePreset} disabled={!newPresetName.trim()}>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Preset
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Manage Filter Presets Dialog */}
+          <Dialog open={showManagePresetsDialog} onOpenChange={setShowManagePresetsDialog}>
+            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Manage Filter Presets</DialogTitle>
+                <DialogDescription>
+                  View, edit, and manage all your saved filter presets.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {filterPresets.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Bookmark className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>No saved presets yet</p>
+                    <p className="text-sm">Save your first preset to get started!</p>
                   </div>
-                </Card>
-
-                {/* Timeline */}
-                <div className="space-y-3">
-                  {userActivities.length === 0 ? (
-                    <Card className="p-8 bg-purple-800/30 border-purple-700 text-center">
-                      <Clock className="h-12 w-12 mx-auto text-purple-400 mb-4" />
-                      <p className="text-purple-300">No activity recorded yet</p>
-                    </Card>
-                  ) : (
-                    userActivities.map((activity, index) => (
-                      <Card key={index} className="p-4 bg-purple-800/50 border-purple-700">
-                        <div className="flex items-start gap-4">
-                          <div className={`p-2 rounded-full ${
-                            activity.activity_type === "login" ? "bg-blue-600" :
-                            activity.activity_type === "deposit" ? "bg-green-600" :
-                            activity.activity_type === "withdrawal" ? "bg-red-600" :
-                            activity.activity_type === "roi_claim" ? "bg-yellow-600" :
-                            activity.activity_type === "commission" ? "bg-purple-600" :
-                            "bg-gray-600"
-                          }`}>
-                            <Activity className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <p className="font-semibold">{activity.description}</p>
-                                <p className="text-sm text-purple-300">
-                                  {new Date(activity.created_at).toLocaleString()}
-                                </p>
-                              </div>
-                              <Badge className={
-                                activity.activity_type === "login" ? "bg-blue-600" :
-                                activity.activity_type === "deposit" ? "bg-green-600" :
-                                activity.activity_type === "withdrawal" ? "bg-red-600" :
-                                activity.activity_type === "roi_claim" ? "bg-yellow-600" :
-                                activity.activity_type === "commission" ? "bg-purple-600" :
-                                "bg-gray-600"
-                              }>
-                                {activity.activity_type}
+                ) : (
+                  <div className="space-y-3">
+                    {filterPresets.map((preset) => (
+                      <Card key={preset.id} className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold">{preset.preset_name}</h4>
+                              {preset.is_default && (
+                                <Badge variant="default" className="gap-1">
+                                  <Star className="h-3 w-3 fill-current" />
+                                  Default
+                                </Badge>
+                              )}
+                              {preset.is_public && (
+                                <Badge variant="secondary" className="gap-1">
+                                  <Globe className="h-3 w-3" />
+                                  Public
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {preset.filters.search && (
+                                <Badge variant="outline" className="text-xs">Search: {preset.filters.search}</Badge>
+                              )}
+                              {preset.filters.statusFilter && preset.filters.statusFilter !== "all" && (
+                                <Badge variant="outline" className="text-xs">Status: {preset.filters.statusFilter}</Badge>
+                              )}
+                              {preset.filters.kycFilter && preset.filters.kycFilter !== "all" && (
+                                <Badge variant="outline" className="text-xs">KYC: {preset.filters.kycFilter}</Badge>
+                              )}
+                              {preset.filters.rankFilter && preset.filters.rankFilter !== "all" && (
+                                <Badge variant="outline" className="text-xs">Rank: Star {preset.filters.rankFilter}</Badge>
+                              )}
+                              {preset.filters.roleFilter && preset.filters.roleFilter !== "all" && (
+                                <Badge variant="outline" className="text-xs">Role: {preset.filters.roleFilter}</Badge>
+                              )}
+                              {preset.filters.dateRangeFilter && preset.filters.dateRangeFilter !== "all" && (
+                                <Badge variant="outline" className="text-xs">Date: {preset.filters.dateRangeFilter}</Badge>
+                              )}
+                              <Badge variant="outline" className="text-xs">
+                                Sort: {preset.filters.sortBy} ({preset.filters.sortOrder})
                               </Badge>
                             </div>
-                            {activity.metadata && (
-                              <div className="mt-2 text-xs text-purple-400">
-                                {JSON.stringify(activity.metadata)}
-                              </div>
+                            <p className="text-xs text-muted-foreground">
+                              Created: {new Date(preset.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                applyFilterPreset(preset);
+                                setShowManagePresetsDialog(false);
+                              }}
+                              className="w-full"
+                            >
+                              <Play className="h-3 w-3 mr-1" />
+                              Apply
+                            </Button>
+                            {preset.user_id === currentUser?.id && !preset.is_default && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleSetDefaultPreset(preset.id)}
+                                className="w-full"
+                              >
+                                <Star className="h-3 w-3 mr-1" />
+                                Set Default
+                              </Button>
+                            )}
+                            {preset.user_id === currentUser?.id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeletePreset(preset.id)}
+                                className="w-full text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Delete
+                              </Button>
                             )}
                           </div>
                         </div>
                       </Card>
-                    ))
-                  )}
-                </div>
-
-                <Button
-                  onClick={() => {
-                    const csvData = userActivities.map(a => ({
-                      "Timestamp": new Date(a.created_at).toLocaleString(),
-                      "Activity Type": a.activity_type,
-                      "Description": a.description,
-                      "IP Address": a.ip_address || "N/A",
-                    }));
-                    exportToCSV(csvData, `sui24_user_activity_${selectedUser.id}_${new Date().toISOString().split("T")[0]}`);
-                  }}
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Activity Timeline (CSV)
-                </Button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowManagePresetsDialog(false)}>
+                  Close
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
     </>
   );
