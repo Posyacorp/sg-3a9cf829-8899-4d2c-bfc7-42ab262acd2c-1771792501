@@ -22,11 +22,14 @@ interface Trade {
   profit?: number;
 }
 
-export default function Trade() {
-  const [balance, setBalance] = useState(1000);
-  const [selectedAsset, setSelectedAsset] = useState("BTC");
+export default function TradePage() {
+  const [selectedCrypto, setSelectedCrypto] = useState("BTC");
+  const [leverage, setLeverage] = useState(100);
   const [amount, setAmount] = useState("");
-  const [leverage] = useState(1000);
+  const [demoBalance, setDemoBalance] = useState(1000); // Demo balance in SUI
+  const [isLong, setIsLong] = useState(true);
+  const [selectedAsset, setSelectedAsset] = useState("BTC");
+  const [leverageValue, setLeverageValue] = useState(1000);
   const [tp, setTp] = useState("");
   const [sl, setSl] = useState("");
   const [autoTpSl, setAutoTpSl] = useState(false);
@@ -57,10 +60,10 @@ export default function Trade() {
     return () => clearInterval(interval);
   }, []);
 
-  const placeTrade = (direction: "up" | "down") => {
+  const handleTrade = () => {
     const tradeAmount = parseFloat(amount);
-    if (isNaN(tradeAmount) || tradeAmount <= 0 || tradeAmount > balance) {
-      alert("Invalid trade amount");
+    if (isNaN(tradeAmount) || tradeAmount <= 0 || tradeAmount > demoBalance) {
+      alert("Invalid amount or insufficient SUI balance");
       return;
     }
 
@@ -68,9 +71,9 @@ export default function Trade() {
     const newTrade: Trade = {
       id: Date.now().toString(),
       asset: selectedAsset,
-      direction,
+      direction: isLong ? "up" : "down",
       amount: tradeAmount,
-      leverage,
+      leverage: leverageValue,
       entryPrice,
       tp: tp ? parseFloat(tp) : 0,
       sl: sl ? parseFloat(sl) : 0,
@@ -78,7 +81,7 @@ export default function Trade() {
     };
 
     setActiveTrades([...activeTrades, newTrade]);
-    setBalance(balance - tradeAmount);
+    setDemoBalance(demoBalance - tradeAmount);
     setAmount("");
   };
 
@@ -97,7 +100,7 @@ export default function Trade() {
 
     setTradeHistory([completedTrade, ...tradeHistory]);
     setActiveTrades(activeTrades.filter(t => t.id !== tradeId));
-    setBalance(balance + trade.amount + profit);
+    setDemoBalance(demoBalance + trade.amount + profit);
   };
 
   return (
@@ -123,7 +126,7 @@ export default function Trade() {
                   </span>
                 </div>
                 <div className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
-                  <span className="text-green-400 text-lg font-bold">${balance.toFixed(2)}</span>
+                  <span className="text-green-400 text-lg font-bold">{demoBalance.toFixed(2)} SUI</span>
                 </div>
               </div>
             </div>
@@ -138,7 +141,7 @@ export default function Trade() {
               <Card className="p-6 bg-slate-900/50 border-purple-500/20 backdrop-blur-xl">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h2 className="text-3xl font-black text-white">{selectedAsset}/USDT</h2>
+                    <h2 className="text-3xl font-black text-white">{selectedAsset}/SUI</h2>
                     <p className="text-2xl text-green-400 font-bold mt-1">
                       ${currentPrices[selectedAsset as keyof typeof currentPrices].toFixed(2)}
                     </p>
@@ -185,7 +188,7 @@ export default function Trade() {
                               )}
                             </div>
                             <div>
-                              <p className="text-white font-bold">{trade.asset}/USDT</p>
+                              <p className="text-white font-bold">{trade.asset}/SUI</p>
                               <p className="text-sm text-gray-400">
                                 {trade.leverage}x Leverage • ${trade.amount}
                               </p>
@@ -232,10 +235,10 @@ export default function Trade() {
                 
                 <div className="space-y-4">
                   <div>
-                    <Label className="text-gray-300">Amount (USDT)</Label>
+                    <label className="block text-sm text-gray-400 mb-2">Amount (SUI)</label>
                     <Input
                       type="number"
-                      placeholder="Enter amount"
+                      placeholder="Enter SUI amount"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       className="bg-slate-950 border-purple-500/30 text-white mt-2"
@@ -245,7 +248,7 @@ export default function Trade() {
                   <div>
                     <Label className="text-gray-300">Leverage</Label>
                     <div className="px-4 py-3 bg-slate-950 border border-purple-500/30 rounded-lg mt-2">
-                      <span className="text-white font-bold text-lg">{leverage}x</span>
+                      <span className="text-white font-bold text-lg">{leverageValue}x</span>
                     </div>
                   </div>
 
@@ -289,14 +292,14 @@ export default function Trade() {
 
                   <div className="grid grid-cols-2 gap-3 pt-4">
                     <Button
-                      onClick={() => placeTrade("up")}
+                      onClick={() => handleTrade()}
                       className="bg-green-500 hover:bg-green-600 h-12 text-lg font-bold"
                     >
                       <TrendingUp className="w-5 h-5 mr-2" />
                       Long
                     </Button>
                     <Button
-                      onClick={() => placeTrade("down")}
+                      onClick={() => handleTrade()}
                       variant="destructive"
                       className="h-12 text-lg font-bold"
                     >
@@ -315,7 +318,7 @@ export default function Trade() {
                     <div key={trade.id} className="p-3 bg-slate-950/50 rounded-lg border border-purple-500/10">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-white font-semibold">{trade.asset}/USDT</p>
+                          <p className="text-white font-semibold">{trade.asset}/SUI</p>
                           <p className="text-xs text-gray-400">
                             {new Date(trade.timestamp).toLocaleTimeString()}
                           </p>

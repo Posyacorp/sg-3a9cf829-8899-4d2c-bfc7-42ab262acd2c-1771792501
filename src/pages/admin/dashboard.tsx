@@ -358,6 +358,19 @@ export default function AdminDashboard() {
     }
   };
 
+  // Key metrics
+  const totalUsers = 1247;
+  const totalVolume = 3456789; // in SUI
+  const totalPlatformEarnings = 245678; // in SUI
+  const activePackages = 892;
+
+  const platformEarningsBreakdown = [
+    { name: "Withdrawal Tax", amount: 125000 },
+    { name: "P2P Fees", amount: 45000 },
+    { name: "Package Fees", amount: 65000 },
+    { name: "Trading Spread", amount: 10678 },
+  ];
+
   // Mock data for charts (will be replaced with real data)
   const revenueData = [
     { date: "Mon", deposits: 45000, withdrawals: 12000, net: 33000, adminFees: 2250 },
@@ -391,13 +404,6 @@ export default function AdminDashboard() {
     commission: [3.0, 2.0, 1.0, 0.5, 0.5, 0.5, ...Array(12).fill(0.25), 0.5, 0.5, 0.5, 1.0, 2.0, 3.0][i],
   }));
 
-  const platformEarnings = [
-    { source: "5% Entry Fee", amount: 19250 },
-    { source: "50% Withdrawal Tax", amount: 65500 },
-    { source: "P2P Transfer Fee (1%)", amount: 450 },
-    { source: "Trading Losses", amount: 12800 },
-  ];
-
   const COLORS = ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444"];
 
   // Export Handlers
@@ -415,7 +421,7 @@ export default function AdminDashboard() {
           { title: "Package Distribution", data: packageDistribution },
           { title: "Transaction Volume", data: transactionVolume },
           { title: "MLM Performance (24 Levels)", data: mlmLevelData },
-          { title: "Platform Earnings Breakdown", data: platformEarnings },
+          { title: "Platform Earnings Breakdown", data: platformEarningsBreakdown },
         ],
         "SUI24 Admin Dashboard Report"
       );
@@ -429,7 +435,7 @@ export default function AdminDashboard() {
         { name: "Package Distribution", data: packageDistribution },
         { name: "Transaction Volume", data: transactionVolume },
         { name: "MLM Performance", data: mlmLevelData },
-        { name: "Platform Earnings", data: platformEarnings },
+        { name: "Platform Earnings", data: platformEarningsBreakdown },
       ],
       "sui24_dashboard_data"
     );
@@ -470,44 +476,42 @@ export default function AdminDashboard() {
 
           {/* Stats Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card className="p-6 bg-gradient-to-br from-purple-800 to-purple-900 border-purple-700">
-              <div className="flex items-center gap-4">
-                <Users className="h-12 w-12 text-purple-400" />
-                <div>
-                  <p className="text-purple-300 text-sm">Total Users</p>
-                  <p className="text-3xl font-bold">{detailedUsers.length}</p>
-                </div>
+            <Card className="p-6 border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-transparent">
+              <div className="flex items-center justify-between mb-4">
+                <Users className="w-8 h-8 text-purple-400" />
+                <span className="text-sm text-gray-400">Total Users</span>
               </div>
+              <div className="text-3xl font-bold">{totalUsers.toLocaleString()}</div>
+              <div className="text-xs text-green-400 mt-2">+12% from last month</div>
             </Card>
 
-            <Card className="p-6 bg-gradient-to-br from-pink-800 to-pink-900 border-pink-700">
-              <div className="flex items-center gap-4">
-                <DollarSign className="h-12 w-12 text-pink-400" />
-                <div>
-                  <p className="text-pink-300 text-sm">Total Volume</p>
-                  <p className="text-3xl font-bold">$860K</p>
-                </div>
+            <Card className="p-6 border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-transparent">
+              <div className="flex items-center justify-between mb-4">
+                <TrendingUp className="w-8 h-8 text-blue-400" />
+                <span className="text-sm text-gray-400">Total Volume</span>
               </div>
+              <div className="text-3xl font-bold">{(totalVolume / 1000000).toFixed(2)}M SUI</div>
+              <div className="text-xs text-gray-500 mt-1">≈ ${((totalVolume * 3.5) / 1000000).toFixed(2)}M USD</div>
+              <div className="text-xs text-green-400 mt-1">+8% from last month</div>
             </Card>
 
-            <Card className="p-6 bg-gradient-to-br from-purple-800 to-pink-900 border-purple-700">
-              <div className="flex items-center gap-4">
-                <TrendingUp className="h-12 w-12 text-purple-400" />
-                <div>
-                  <p className="text-purple-300 text-sm">Platform Earnings</p>
-                  <p className="text-3xl font-bold">$98K</p>
-                </div>
+            <Card className="p-6 border-green-500/20 bg-gradient-to-br from-green-500/10 to-transparent">
+              <div className="flex items-center justify-between mb-4">
+                <DollarSign className="w-8 h-8 text-green-400" />
+                <span className="text-sm text-gray-400">Platform Earnings</span>
               </div>
+              <div className="text-3xl font-bold">{(totalPlatformEarnings / 1000).toFixed(0)}K SUI</div>
+              <div className="text-xs text-gray-500 mt-1">≈ ${((totalPlatformEarnings * 3.5) / 1000).toFixed(0)}K USD</div>
+              <div className="text-xs text-green-400 mt-1">+15% from last month</div>
             </Card>
 
-            <Card className="p-6 bg-gradient-to-br from-pink-800 to-purple-900 border-pink-700">
-              <div className="flex items-center gap-4">
-                <Package className="h-12 w-12 text-pink-400" />
-                <div>
-                  <p className="text-pink-300 text-sm">Active Packages</p>
-                  <p className="text-3xl font-bold">1,000</p>
-                </div>
+            <Card className="p-6 border-pink-500/20 bg-gradient-to-br from-pink-500/10 to-transparent">
+              <div className="flex items-center justify-between mb-4">
+                <Package className="w-8 h-8 text-pink-400" />
+                <span className="text-sm text-gray-400">Active Packages</span>
               </div>
+              <div className="text-3xl font-bold">{activePackages.toLocaleString()}</div>
+              <div className="text-xs text-green-400 mt-2">+10% from last month</div>
             </Card>
           </div>
 
@@ -611,7 +615,7 @@ export default function AdminDashboard() {
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={platformEarnings}
+                    data={platformEarningsBreakdown}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -620,7 +624,7 @@ export default function AdminDashboard() {
                     fill="#8884d8"
                     dataKey="amount"
                   >
-                    {platformEarnings.map((entry, index) => (
+                    {platformEarningsBreakdown.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -807,17 +811,14 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                           </td>
-                          <td className="p-3">
+                          <td className="px-4 py-3">
                             <div className="font-semibold text-green-400">
                               ${user.current_balance?.toFixed(2) || "0.00"}
                             </div>
                           </td>
-                          <td className="p-3">
-                            <div>
-                              <div className="font-semibold">{user.star_rank || "N/A"}</div>
-                              <div className="text-xs text-purple-300">{user.team_size || 0} users</div>
-                              <div className="text-xs text-gray-500">${((user.team_volume || 0) / 1000).toFixed(0)}K</div>
-                            </div>
+                          <td className="px-4 py-3">
+                            <div className="text-sm">{(user.team_volume / 1000).toFixed(0)}K SUI</div>
+                            <div className="text-xs text-gray-500">Team: {user.team_size}</div>
                           </td>
                           <td className="p-3">
                             <Badge
@@ -951,31 +952,35 @@ export default function AdminDashboard() {
                 </Card>
 
                 {/* Financial Summary */}
-                <Card className="p-4 bg-purple-800/50 border-purple-700">
-                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                    <DollarSign className="h-5 w-5" />
+                <Card className="p-4">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-green-400" />
                     Financial Summary
                   </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-purple-300">Total Deposits:</span>
-                      <p className="font-semibold text-green-400">${selectedUser.total_deposits || 0}</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Total Deposits:</span>
+                      <span className="font-semibold">{selectedUser.total_deposits.toLocaleString()} SUI</span>
                     </div>
-                    <div>
-                      <span className="text-purple-300">Total Withdrawals:</span>
-                      <p className="font-semibold text-red-400">${selectedUser.total_withdrawals || 0}</p>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Total Withdrawals:</span>
+                      <span className="font-semibold">{selectedUser.total_withdrawals.toLocaleString()} SUI</span>
                     </div>
-                    <div>
-                      <span className="text-purple-300">Current Balance:</span>
-                      <p className="font-semibold text-blue-400">${selectedUser.current_balance || 0}</p>
+                    <div className="flex justify-between border-t border-gray-700 pt-2">
+                      <span className="text-gray-400">Current Balance:</span>
+                      <span className="font-bold text-blue-400">{selectedUser.current_balance.toLocaleString()} SUI</span>
                     </div>
-                    <div>
-                      <span className="text-purple-300">Active Packages:</span>
-                      <p className="font-semibold">{selectedUser.user_packages?.length || 0}</p>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">USD Equivalent:</span>
+                      <span className="text-gray-500">${(selectedUser.current_balance * 3.5).toFixed(2)}</span>
                     </div>
-                    <div>
-                      <span className="text-purple-300">Total Commissions:</span>
-                      <p className="font-semibold text-purple-400">${selectedUser.total_commissions || 0}</p>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Active Packages:</span>
+                      <span className="font-semibold">{selectedUser.active_packages}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Total Commissions:</span>
+                      <span className="font-semibold text-green-400">{selectedUser.total_commissions.toLocaleString()} SUI</span>
                     </div>
                   </div>
                 </Card>

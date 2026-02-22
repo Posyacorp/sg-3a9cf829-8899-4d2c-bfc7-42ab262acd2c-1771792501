@@ -21,22 +21,30 @@ interface WalletBalance {
 
 interface Transaction {
   id: string;
-  type: "deposit" | "withdraw" | "transfer" | "p2p";
+  type: string;
   amount: number;
   wallet: string;
-  status: "pending" | "completed" | "rejected";
+  status: string;
   timestamp: number;
   hash?: string;
   fee?: number;
 }
 
-export default function Wallets() {
-  const [wallets, setWallets] = useState<WalletBalance>({
-    main: 150.5,
-    roi: 45.8,
-    earning: 23.2,
-    p2p: 12.0
+export default function WalletsPage() {
+  const [wallets, setWallets] = useState({
+    main: 150.5, // SUI
+    roi: 45.2, // SUI
+    earning: 78.9, // SUI
+    p2p: 32.1, // SUI
   });
+
+  const [transactions, setTransactions] = useState<Transaction[]>([
+    { id: "1", type: "Deposit", amount: 100, wallet: "Main", status: "Completed", timestamp: Date.now() - 86400000 * 2, hash: "0x1234...5678" },
+    { id: "2", type: "ROI Claim", amount: 8.5, wallet: "ROI", status: "Completed", timestamp: Date.now() - 86400000, hash: "0xabcd...efgh" },
+    { id: "3", type: "Commission", amount: 12.3, wallet: "Earning", status: "Completed", timestamp: Date.now() - 86400000, hash: "0x9876...5432" },
+    { id: "4", type: "P2P Transfer", amount: 50, wallet: "P2P", status: "Completed", timestamp: Date.now(), hash: "0xijkl...mnop" },
+    { id: "5", type: "Withdrawal", amount: 75, wallet: "Main", status: "Pending", timestamp: Date.now(), hash: "Pending..." },
+  ]);
 
   const [activeTab, setActiveTab] = useState("overview");
   const [depositAmount, setDepositAmount] = useState("");
@@ -46,28 +54,6 @@ export default function Wallets() {
   const [p2pAmount, setP2pAmount] = useState("");
   const [depositAddress] = useState("0xSUI24f8a9d3c2e1b7f6a5d4c3e2b1a9f8e7d6c5b4a3");
   const [copied, setCopied] = useState(false);
-
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    {
-      id: "1",
-      type: "deposit",
-      amount: 100,
-      wallet: "main",
-      status: "completed",
-      timestamp: Date.now() - 1000 * 60 * 60 * 24 * 2,
-      hash: "0x1234...5678"
-    },
-    {
-      id: "2",
-      type: "withdraw",
-      amount: 50,
-      wallet: "roi",
-      status: "completed",
-      timestamp: Date.now() - 1000 * 60 * 60 * 24,
-      fee: 25,
-      hash: "0xabcd...efgh"
-    }
-  ]);
 
   const copyAddress = () => {
     navigator.clipboard.writeText(depositAddress);
@@ -224,7 +210,8 @@ export default function Wallets() {
                   <span className="text-gray-400 text-sm">Main Wallet</span>
                   <Wallet className="w-4 h-4 text-purple-400" />
                 </div>
-                <p className="text-2xl font-bold text-white">{wallets.main.toFixed(2)}</p>
+                <div className="text-3xl font-bold">{wallets.main.toFixed(2)} SUI</div>
+                <div className="text-sm text-gray-500 mt-1">≈ ${(wallets.main * 3.5).toFixed(2)} USD</div>
                 <p className="text-xs text-gray-500 mt-1">Deposit Wallet</p>
               </div>
 
@@ -233,7 +220,8 @@ export default function Wallets() {
                   <span className="text-gray-400 text-sm">ROI Wallet</span>
                   <TrendingUp className="w-4 h-4 text-green-400" />
                 </div>
-                <p className="text-2xl font-bold text-white">{wallets.roi.toFixed(2)}</p>
+                <div className="text-3xl font-bold">{wallets.roi.toFixed(2)} SUI</div>
+                <div className="text-sm text-gray-500 mt-1">≈ ${(wallets.roi * 3.5).toFixed(2)} USD</div>
                 <p className="text-xs text-gray-500 mt-1">Task Rewards</p>
               </div>
 
@@ -242,7 +230,8 @@ export default function Wallets() {
                   <span className="text-gray-400 text-sm">Earning Wallet</span>
                   <ArrowUpRight className="w-4 h-4 text-blue-400" />
                 </div>
-                <p className="text-2xl font-bold text-white">{wallets.earning.toFixed(2)}</p>
+                <div className="text-3xl font-bold">{wallets.earning.toFixed(2)} SUI</div>
+                <div className="text-sm text-gray-500 mt-1">≈ ${(wallets.earning * 3.5).toFixed(2)} USD</div>
                 <p className="text-xs text-gray-500 mt-1">MLM Commission</p>
               </div>
 
@@ -251,7 +240,8 @@ export default function Wallets() {
                   <span className="text-gray-400 text-sm">P2P Wallet</span>
                   <Send className="w-4 h-4 text-yellow-400" />
                 </div>
-                <p className="text-2xl font-bold text-white">{wallets.p2p.toFixed(2)}</p>
+                <div className="text-3xl font-bold">{wallets.p2p.toFixed(2)} SUI</div>
+                <div className="text-sm text-gray-500 mt-1">≈ ${(wallets.p2p * 3.5).toFixed(2)} USD</div>
                 <p className="text-xs text-gray-500 mt-1">P2P Transfer</p>
               </div>
             </div>
@@ -346,12 +336,12 @@ export default function Wallets() {
                   </div>
 
                   <div>
-                    <Label className="text-gray-300">Amount (SUI)</Label>
+                    <label className="block text-sm text-gray-400 mb-2">Amount (SUI)</label>
                     <Input
                       type="number"
-                      placeholder="Enter amount (min 30 SUI)"
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(e.target.value)}
+                      placeholder="Minimum 30 SUI"
                       className="bg-slate-950 border-purple-500/30 text-white mt-2"
                     />
                   </div>
@@ -402,12 +392,12 @@ export default function Wallets() {
                   </div>
 
                   <div>
-                    <Label className="text-gray-300">Withdraw Amount (SUI)</Label>
+                    <label className="block text-sm text-gray-400 mb-2">Withdraw Amount (SUI)</label>
                     <Input
                       type="number"
-                      placeholder="Enter amount"
                       value={withdrawAmount}
                       onChange={(e) => setWithdrawAmount(e.target.value)}
+                      placeholder="Enter SUI amount"
                       className="bg-slate-950 border-purple-500/30 text-white mt-2"
                     />
                     {withdrawAmount && (
@@ -469,12 +459,12 @@ export default function Wallets() {
                   </div>
 
                   <div>
-                    <Label className="text-gray-300">Transfer Amount (SUI)</Label>
+                    <label className="block text-sm text-gray-400 mb-2">Transfer Amount (SUI)</label>
                     <Input
                       type="number"
-                      placeholder="Enter amount"
                       value={p2pAmount}
                       onChange={(e) => setP2pAmount(e.target.value)}
+                      placeholder="Enter SUI amount"
                       className="bg-slate-950 border-purple-500/30 text-white mt-2"
                     />
                     {p2pAmount && (

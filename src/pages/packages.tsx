@@ -27,7 +27,7 @@ const packages: Package[] = [
   { id: 9, name: "Legend", deposit: 15000, maxRoi: 300, color: "red", icon: "🔥" }
 ];
 
-export default function Packages() {
+export default function PackagesPage() {
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   const [isLoggedIn] = useState(false);
 

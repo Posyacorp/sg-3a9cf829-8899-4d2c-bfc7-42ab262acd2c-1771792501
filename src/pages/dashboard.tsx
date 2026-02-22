@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   TrendingUp, Wallet, Clock, Users, Gift, ArrowUpRight, 
-  ArrowDownRight, Copy, CheckCircle, AlertCircle 
+  ArrowDownRight, Copy, CheckCircle, AlertCircle, DollarSign, ArrowLeftRight 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -181,41 +181,41 @@ export default function Dashboard() {
 
         <div className="container mx-auto px-4 py-8">
           {/* Wallet Balances */}
-          <div className="grid md:grid-cols-4 gap-4 mb-8">
-            <Card className="p-6 bg-slate-900/50 border-purple-500/20 backdrop-blur-xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <Card className="p-6 border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-transparent">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">Main Wallet</span>
+                <div className="text-sm text-gray-400">Main Wallet</div>
                 <Wallet className="w-5 h-5 text-purple-400" />
               </div>
-              <p className="text-2xl font-black text-white">{wallets.main.toFixed(2)} SUI</p>
-              <p className="text-xs text-gray-500 mt-1">Deposit Wallet</p>
+              <div className="text-2xl font-bold">{wallets.main.toFixed(2)} SUI</div>
+              <div className="text-xs text-gray-500 mt-1">≈ ${(wallets.main * 3.5).toFixed(2)} USD</div>
             </Card>
 
-            <Card className="p-6 bg-slate-900/50 border-green-500/20 backdrop-blur-xl">
+            <Card className="p-6 border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-transparent">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">ROI Wallet</span>
-                <TrendingUp className="w-5 h-5 text-green-400" />
+                <div className="text-sm text-gray-400">ROI Wallet</div>
+                <TrendingUp className="w-5 h-5 text-blue-400" />
               </div>
-              <p className="text-2xl font-black text-white">{wallets.roi.toFixed(2)} SUI</p>
-              <p className="text-xs text-gray-500 mt-1">Task Rewards</p>
+              <div className="text-2xl font-bold">{wallets.roi.toFixed(2)} SUI</div>
+              <div className="text-xs text-gray-500 mt-1">≈ ${(wallets.roi * 3.5).toFixed(2)} USD</div>
             </Card>
 
-            <Card className="p-6 bg-slate-900/50 border-blue-500/20 backdrop-blur-xl">
+            <Card className="p-6 border-green-500/20 bg-gradient-to-br from-green-500/10 to-transparent">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">Earning Wallet</span>
-                <Users className="w-5 h-5 text-blue-400" />
+                <div className="text-sm text-gray-400">Earning Wallet</div>
+                <DollarSign className="w-5 h-5 text-green-400" />
               </div>
-              <p className="text-2xl font-black text-white">{wallets.earning.toFixed(2)} SUI</p>
-              <p className="text-xs text-gray-500 mt-1">MLM Commission</p>
+              <div className="text-2xl font-bold">{wallets.earning.toFixed(2)} SUI</div>
+              <div className="text-xs text-gray-500 mt-1">≈ ${(wallets.earning * 3.5).toFixed(2)} USD</div>
             </Card>
 
-            <Card className="p-6 bg-slate-900/50 border-yellow-500/20 backdrop-blur-xl">
+            <Card className="p-6 border-pink-500/20 bg-gradient-to-br from-pink-500/10 to-transparent">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">P2P Wallet</span>
-                <ArrowUpRight className="w-5 h-5 text-yellow-400" />
+                <div className="text-sm text-gray-400">P2P Wallet</div>
+                <ArrowLeftRight className="w-5 h-5 text-pink-400" />
               </div>
-              <p className="text-2xl font-black text-white">{wallets.p2p.toFixed(2)} SUI</p>
-              <p className="text-xs text-gray-500 mt-1">P2P Transfer</p>
+              <div className="text-2xl font-bold">{wallets.p2p.toFixed(2)} SUI</div>
+              <div className="text-xs text-gray-500 mt-1">≈ ${(wallets.p2p * 3.5).toFixed(2)} USD</div>
             </Card>
           </div>
 
@@ -405,7 +405,7 @@ export default function Dashboard() {
                               : "text-red-400"
                           }`}>
                             {tx.type === "deposit" || tx.type === "roi" || tx.type === "commission" ? "+" : "-"}
-                            {tx.amount.toFixed(2)} SUI
+                            {tx.amount} SUI
                           </p>
                           <Badge className={
                             tx.status === "completed" ? "bg-green-500/20 text-green-400" :
