@@ -307,7 +307,7 @@ export const adminService = {
   async bulkUpdateKYCStatus(userIds: string[], status: string) {
     const { data, error } = await supabase
       .from("profiles")
-      .update({ kyc_status: status })
+      .update({ kyc_status: status } as any)
       .in("id", userIds)
       .select();
 
