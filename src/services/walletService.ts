@@ -39,13 +39,12 @@ export async function p2pTransfer(data: {
       return { success: false, error: "Cannot transfer to yourself" };
     }
 
-    // Get sender wallet
+    // Check sufficient balance first (client-side check for better UX)
     const senderWallet = await getUserWallet(user.id);
     if (!senderWallet.success || !senderWallet.wallet) {
       return { success: false, error: "Wallet not found" };
     }
 
-    // Check sufficient balance
     const senderBalance = senderWallet.wallet[data.fromWallet] || 0;
     if (senderBalance < data.amount) {
       return { success: false, error: "Insufficient balance" };
@@ -55,21 +54,16 @@ export async function p2pTransfer(data: {
     const p2pFee = data.amount * 0.01;
     const netAmount = data.amount - p2pFee;
 
-    // Deduct from sender using SQL UPDATE
-    await supabase
-      .from("wallets")
-      .update({ 
-        [data.fromWallet]: supabase.raw(`${data.fromWallet} - ${data.amount}`) 
-      })
-      .eq("user_id", user.id);
+    // Use RPC for atomic transfer
+    const { error: transferError } = await supabase.rpc('p2p_transfer', {
+      p_sender_id: user.id,
+      p_receiver_id: data.toUserId,
+      p_wallet_type: data.fromWallet,
+      p_amount: data.amount,
+      p_fee: p2pFee
+    });
 
-    // Credit to receiver's P2P wallet using SQL UPDATE
-    await supabase
-      .from("wallets")
-      .update({ 
-        p2p_balance: supabase.raw(`p2p_balance + ${netAmount}`) 
-      })
-      .eq("user_id", data.toUserId);
+    if (transferError) return { success: false, error: transferError.message };
 
     // Record P2P fee to admin
     await supabase.from("transactions").insert({
@@ -128,26 +122,15 @@ export async function internalTransfer(data: {
       return { success: false, error: "Cannot transfer to same wallet" };
     }
 
-    // Get wallet
-    const wallet = await getUserWallet(user.id);
-    if (!wallet.success || !wallet.wallet) {
-      return { success: false, error: "Wallet not found" };
-    }
+    // Use RPC for atomic transfer
+    const { error: transferError } = await supabase.rpc('internal_transfer', {
+      p_user_id: user.id,
+      p_from_wallet: data.fromWallet,
+      p_to_wallet: data.toWallet,
+      p_amount: data.amount
+    });
 
-    // Check sufficient balance
-    const balance = wallet.wallet[data.fromWallet] || 0;
-    if (balance < data.amount) {
-      return { success: false, error: "Insufficient balance" };
-    }
-
-    // Perform internal transfer using SQL UPDATE
-    await supabase
-      .from("wallets")
-      .update({ 
-        [data.fromWallet]: supabase.raw(`${data.fromWallet} - ${data.amount}`),
-        [data.toWallet]: supabase.raw(`${data.toWallet} + ${data.amount}`)
-      })
-      .eq("user_id", user.id);
+    if (transferError) return { success: false, error: transferError.message };
 
     return { success: true };
   } catch (error: unknown) {
@@ -187,30 +170,18 @@ export async function requestWithdrawal(data: {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
-    // Get wallet
-    const wallet = await getUserWallet(user.id);
-    if (!wallet.success || !wallet.wallet) {
-      return { success: false, error: "Wallet not found" };
-    }
-
-    // Check sufficient balance
-    const balance = wallet.wallet[data.fromWallet] || 0;
-    if (balance < data.amount) {
-      return { success: false, error: "Insufficient balance" };
-    }
-
     // Calculate 50% withdrawal tax for external withdrawals
     const withdrawalTax = data.amount * 0.50;
     const netAmount = data.amount - withdrawalTax;
 
-    // Deduct from wallet (will be held until admin approval)
-    await supabase
-      .from("wallets")
-      .update({ 
-        [data.fromWallet]: supabase.raw(`${data.fromWallet} - ${data.amount}`),
-        locked_balance: supabase.raw(`locked_balance + ${data.amount}`)
-      })
-      .eq("user_id", user.id);
+    // Use RPC to lock funds
+    const { error: lockError } = await supabase.rpc('lock_funds', {
+      p_user_id: user.id,
+      p_wallet_type: data.fromWallet,
+      p_amount: data.amount
+    });
+
+    if (lockError) return { success: false, error: lockError.message };
 
     // Create withdrawal transaction (pending admin approval)
     const { data: transaction, error: txError } = await supabase

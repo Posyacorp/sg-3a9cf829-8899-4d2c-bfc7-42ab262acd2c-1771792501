@@ -781,6 +781,29 @@ export type Database = {
     }
     Functions: {
       generate_referral_code: { Args: never; Returns: string }
+      internal_transfer: {
+        Args: {
+          p_amount: number
+          p_from_wallet: string
+          p_to_wallet: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      lock_funds: {
+        Args: { p_amount: number; p_user_id: string; p_wallet_type: string }
+        Returns: undefined
+      }
+      p2p_transfer: {
+        Args: {
+          p_amount: number
+          p_fee: number
+          p_receiver_id: string
+          p_sender_id: string
+          p_wallet_type: string
+        }
+        Returns: undefined
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

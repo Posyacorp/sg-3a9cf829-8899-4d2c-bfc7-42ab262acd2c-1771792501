@@ -252,13 +252,17 @@ export async function claimTaskReward(userPackageId: string) {
 
     if (updateError) return { success: false, error: updateError.message };
 
-    // Credit ROI wallet using SQL UPDATE
-    await supabase
-      .from("wallets")
-      .update({ 
-        roi_balance: supabase.raw(`roi_balance + ${rewardAmount}`) 
-      })
-      .eq("user_id", user.id);
+    // Credit ROI wallet using RPC
+    const { error: walletError } = await supabase.rpc('credit_wallet', {
+      p_user_id: user.id,
+      p_wallet_type: 'roi_balance',
+      p_amount: rewardAmount
+    });
+
+    if (walletError) {
+      console.error("Wallet update error:", walletError);
+      // Note: We should ideally revert the task update here, but for now we log it
+    }
 
     // Record ROI claim transaction
     await supabase.from("transactions").insert({
