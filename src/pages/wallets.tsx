@@ -32,10 +32,10 @@ interface Transaction {
 
 export default function WalletsPage() {
   const [wallets, setWallets] = useState({
-    main: 150.5, // SUI
-    roi: 45.2, // SUI
-    earning: 78.9, // SUI
-    p2p: 32.1, // SUI
+    main: 0,
+    roi: 0,
+    earning: 0,
+    p2p: 0,
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>([
@@ -48,11 +48,12 @@ export default function WalletsPage() {
 
   const [activeTab, setActiveTab] = useState("overview");
   const [depositAmount, setDepositAmount] = useState("");
+  const [depositHash, setDepositHash] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawWallet, setWithdrawWallet] = useState("main");
   const [p2pRecipient, setP2pRecipient] = useState("");
   const [p2pAmount, setP2pAmount] = useState("");
-  const [depositAddress] = useState("0xSUI24f8a9d3c2e1b7f6a5d4c3e2b1a9f8e7d6c5b4a3");
+  const [depositAddress] = useState("0xf57c83c39866238fe4860ef426426d170c3b6f6b");
   const [copied, setCopied] = useState(false);
 
   const copyAddress = () => {
@@ -320,20 +321,35 @@ export default function WalletsPage() {
                     </p>
                   </div>
 
-                  <div>
-                    <Label className="text-gray-300">Deposit Address (SUI Network)</Label>
-                    <div className="flex gap-3 mt-2">
-                      <Input
-                        type="text"
-                        value={depositAddress}
-                        readOnly
-                        className="bg-slate-950 border-purple-500/30 text-white font-mono"
-                      />
-                      <Button onClick={copyAddress} className="bg-purple-500 hover:bg-purple-600">
-                        {copied ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                      </Button>
+                  <Card className="p-6">
+                    <h3 className="text-xl font-bold mb-4">Deposit SUI</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Deposit Address (SUI Network)
+                        </label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={depositAddress}
+                            readOnly
+                            className="font-mono text-xs"
+                          />
+                          <Button
+                            onClick={() => {
+                              navigator.clipboard.writeText(depositAddress);
+                              alert("Address copied to clipboard!");
+                            }}
+                            variant="outline"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-yellow-400 mt-2">
+                          ⚠️ Only send SUI to this address. Minimum deposit: 30 SUI
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  </Card>
 
                   <div>
                     <label className="block text-sm text-gray-400 mb-2">Amount (SUI)</label>
