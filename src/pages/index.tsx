@@ -14,7 +14,8 @@ import {
   Activity,
   Trophy,
   Star,
-  ChevronRight
+  ChevronRight,
+  ArrowDownRight
 } from "lucide-react";
 
 interface PriceTicker {
@@ -25,17 +26,47 @@ interface PriceTicker {
 }
 
 export default function Home() {
-  const [suiPrice, setSuiPrice] = useState<number>(4.32);
+  const [suiPrice, setSuiPrice] = useState({ price: 0, change: 0, loading: true });
+
+  // Fetch real-time SUI price from CoinGecko API
+  useEffect(() => {
+    const fetchSuiPrice = async () => {
+      try {
+        const response = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd&include_24hr_change=true'
+        );
+        const data = await response.json();
+        
+        if (data.sui) {
+          setSuiPrice({
+            price: data.sui.usd,
+            change: data.sui.usd_24h_change || 0,
+            loading: false
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch SUI price:', error);
+        // Fallback to approximate price if API fails
+        setSuiPrice({ price: 0.90, change: 0, loading: false });
+      }
+    };
+
+    fetchSuiPrice();
+    // Update price every 30 seconds
+    const interval = setInterval(fetchSuiPrice, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const [priceChange, setPriceChange] = useState<number>(0);
   const [tickers, setTickers] = useState<PriceTicker[]>([
-    { symbol: "SUI", price: 4.32, change: 0.15, changePercent: 3.6 },
+    { symbol: "SUI", price: 0.92, change: 5.2, changePercent: 5.2 },
     { symbol: "BTC", price: 98420, change: 1250, changePercent: 1.3 },
     { symbol: "ETH", price: 3680, change: -45, changePercent: -1.2 },
     { symbol: "SOL", price: 189, change: 8.5, changePercent: 4.7 }
   ]);
 
   useEffect(() => {
-    // Simulate real-time price updates
+    // Simulate real-time price updates for other coins
     const interval = setInterval(() => {
       setTickers(prev => prev.map(ticker => {
         const randomChange = (Math.random() - 0.5) * 2;
@@ -43,9 +74,12 @@ export default function Home() {
         const change = newPrice - ticker.price;
         const changePercent = (change / ticker.price) * 100;
         
+        // Don't simulate SUI price in tickers, let the main API handle it
         if (ticker.symbol === "SUI") {
-          setSuiPrice(newPrice);
-          setPriceChange(changePercent);
+           // Optional: You could sync the ticker SUI price with the real suiPrice state here if you wanted,
+           // but for now, we'll just let it drift slightly or remove this block to prevent errors.
+           // We will just return the ticker updated with random noise for the "ticker tape" effect,
+           // BUT we will NOT call setSuiPrice() here.
         }
         
         return {
@@ -121,6 +155,45 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Live SUI Price Ticker */}
+        <div className="fixed top-20 left-0 right-0 z-40 pointer-events-none">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="glass-card rounded-2xl p-4 pointer-events-auto animate-float">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <TrendingUp className="w-5 h-5 text-purple-400" />
+                  <span className="text-sm text-purple-300 font-medium">SUI Live Price:</span>
+                </div>
+                
+                {suiPrice.loading ? (
+                  <div className="animate-pulse flex gap-2">
+                    <div className="h-6 w-24 bg-purple-500/20 rounded"></div>
+                    <div className="h-6 w-16 bg-purple-500/20 rounded"></div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
+                      ${suiPrice.price.toFixed(4)}
+                    </div>
+                    <div className={`flex items-center gap-1 px-3 py-1 rounded-full ${
+                      suiPrice.change >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                    }`}>
+                      {suiPrice.change >= 0 ? (
+                        <ArrowUpRight className="w-4 h-4" />
+                      ) : (
+                        <ArrowDownRight className="w-4 h-4" />
+                      )}
+                      <span className="text-sm font-semibold">
+                        {suiPrice.change >= 0 ? '+' : ''}{suiPrice.change.toFixed(2)}%
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Header */}
         <header className="relative z-10 border-b border-white/10 bg-black/20 backdrop-blur-sm">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -156,9 +229,9 @@ export default function Home() {
               <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full glass-effect">
                 <Activity className="w-5 h-5 text-green-400 animate-pulse" />
                 <span className="text-white/70 font-medium">SUI Live Price:</span>
-                <span className="text-2xl font-bold text-white">${suiPrice.toFixed(4)}</span>
-                <span className={`text-sm font-semibold px-2 py-1 rounded ${priceChange >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                  {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+                <span className="text-2xl font-bold text-white">${suiPrice.price.toFixed(4)}</span>
+                <span className={`text-sm font-semibold px-2 py-1 rounded ${suiPrice.change >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  {suiPrice.change >= 0 ? '+' : ''}{suiPrice.change.toFixed(2)}%
                 </span>
               </div>
 
