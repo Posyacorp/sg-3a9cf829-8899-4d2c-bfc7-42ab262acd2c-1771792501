@@ -85,6 +85,31 @@ export default function AdminDashboard() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  const fetchUsers = async () => {
+    try {
+      const filters = {
+        search: searchQuery,
+        status: statusFilter,
+        kycStatus: kycFilter,
+        starRank: rankFilter
+      };
+      
+      const users = await adminService.getAllUsers(filters);
+      setDetailedUsers(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      const timeoutId = setTimeout(() => {
+        fetchUsers();
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [searchQuery, statusFilter, kycFilter, rankFilter, isAdmin]);
+
   useEffect(() => {
     checkAdminAuth();
   }, []);
