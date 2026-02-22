@@ -32,27 +32,43 @@ export default function Home() {
   useEffect(() => {
     const fetchSuiPrice = async () => {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
         const response = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd&include_24hr_change=true'
+          "https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd&include_24hr_change=true",
+          { signal: controller.signal }
         );
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          console.error("SUI price fetch failed with status:", response.status);
+          setSuiPrice({ price: 0.9, change: 0, loading: false });
+          return;
+        }
+
         const data = await response.json();
         
-        if (data.sui) {
+        if (data?.sui && typeof data.sui.usd === "number") {
           setSuiPrice({
             price: data.sui.usd,
             change: data.sui.usd_24h_change || 0,
             loading: false
           });
+        } else {
+          console.warn("Unexpected SUI price response shape:", data);
+          setSuiPrice({ price: 0.9, change: 0, loading: false });
         }
       } catch (error) {
-        console.error('Failed to fetch SUI price:', error);
+        console.error("Failed to fetch SUI price (non-blocking):", error);
         // Fallback to approximate price if API fails
-        setSuiPrice({ price: 0.90, change: 0, loading: false });
+        setSuiPrice({ price: 0.9, change: 0, loading: false });
       }
     };
 
     fetchSuiPrice();
-    // Update price every 30 seconds
+    // Update price every 30 seconds, but never block UI
     const interval = setInterval(fetchSuiPrice, 30000);
     return () => clearInterval(interval);
   }, []);
