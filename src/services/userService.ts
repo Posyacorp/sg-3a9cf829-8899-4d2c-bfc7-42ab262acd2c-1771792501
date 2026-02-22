@@ -176,19 +176,17 @@ export async function getUserDownlineCount(userId: string) {
 // Check if user has active package (for MLM commission eligibility)
 export async function hasActivePackage(userId: string) {
   try {
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from("user_packages")
-      .select("id")
+      .select("*", { count: "exact", head: true })
       .eq("user_id", userId)
-      .eq("status", "active")
-      .limit(1)
-      .single();
+      .eq("status", "active");
 
-    if (error && error.code !== "PGRST116") {
+    if (error) {
       return { success: false, error: error.message };
     }
 
-    return { success: true, hasActive: !!data };
+    return { success: true, hasActive: (count || 0) > 0 };
   } catch (error: unknown) {
     console.error("Check active package error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Check failed" };

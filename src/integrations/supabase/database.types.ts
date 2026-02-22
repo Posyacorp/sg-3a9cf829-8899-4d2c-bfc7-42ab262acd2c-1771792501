@@ -780,6 +780,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      credit_wallet: {
+        Args: { p_amount: number; p_user_id: string; p_wallet_type: string }
+        Returns: undefined
+      }
       generate_referral_code: { Args: never; Returns: string }
       internal_transfer: {
         Args: {
