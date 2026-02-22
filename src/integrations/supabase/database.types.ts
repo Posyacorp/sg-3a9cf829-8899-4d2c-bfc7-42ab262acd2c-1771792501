@@ -19,48 +19,51 @@ export type Database = {
         Row: {
           base_amount: number
           commission_amount: number
-          commission_rate: number
-          commission_type: string
+          commission_percentage: number
           created_at: string | null
           from_user_id: string
           id: string
-          level: number
+          level: number | null
           package_id: string | null
-          transaction_id: string | null
+          status: string | null
+          type: string
           user_id: string
+          user_package_id: string | null
         }
         Insert: {
           base_amount: number
           commission_amount: number
-          commission_rate: number
-          commission_type: string
+          commission_percentage: number
           created_at?: string | null
           from_user_id: string
           id?: string
-          level: number
+          level?: number | null
           package_id?: string | null
-          transaction_id?: string | null
+          status?: string | null
+          type: string
           user_id: string
+          user_package_id?: string | null
         }
         Update: {
           base_amount?: number
           commission_amount?: number
-          commission_rate?: number
-          commission_type?: string
+          commission_percentage?: number
           created_at?: string | null
           from_user_id?: string
           id?: string
-          level?: number
+          level?: number | null
           package_id?: string | null
-          transaction_id?: string | null
+          status?: string | null
+          type?: string
           user_id?: string
+          user_package_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "mlm_commissions_from_user_id_fkey"
             columns: ["from_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -71,17 +74,62 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "mlm_commissions_transaction_id_fkey"
-            columns: ["transaction_id"]
-            isOneToOne: false
-            referencedRelation: "transactions"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "mlm_commissions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mlm_commissions_user_package_id_fkey"
+            columns: ["user_package_id"]
+            isOneToOne: false
+            referencedRelation: "user_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mlm_network: {
+        Row: {
+          created_at: string | null
+          id: string
+          level: number
+          path: string
+          sponsor_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          level: number
+          path: string
+          sponsor_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          level?: number
+          path?: string
+          sponsor_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mlm_network_sponsor_id_fkey"
+            columns: ["sponsor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mlm_network_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -93,7 +141,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           max_roi_percentage: number
-          min_investment: number
+          min_deposit: number
           name: string
           sort_order: number | null
           task_interval_hours: number | null
@@ -106,7 +154,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           max_roi_percentage: number
-          min_investment: number
+          min_deposit: number
           name: string
           sort_order?: number | null
           task_interval_hours?: number | null
@@ -119,7 +167,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           max_roi_percentage?: number
-          min_investment?: number
+          min_deposit?: number
           name?: string
           sort_order?: number | null
           task_interval_hours?: number | null
@@ -127,6 +175,131 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      prediction_markets: {
+        Row: {
+          category: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          end_date: string
+          id: string
+          no_probability: number | null
+          no_volume: number | null
+          outcome: string | null
+          resolution_date: string | null
+          status: string
+          title: string
+          total_volume: number | null
+          updated_at: string | null
+          yes_probability: number | null
+          yes_volume: number | null
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          end_date: string
+          id?: string
+          no_probability?: number | null
+          no_volume?: number | null
+          outcome?: string | null
+          resolution_date?: string | null
+          status?: string
+          title: string
+          total_volume?: number | null
+          updated_at?: string | null
+          yes_probability?: number | null
+          yes_volume?: number | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          end_date?: string
+          id?: string
+          no_probability?: number | null
+          no_volume?: number | null
+          outcome?: string | null
+          resolution_date?: string | null
+          status?: string
+          title?: string
+          total_volume?: number | null
+          updated_at?: string | null
+          yes_probability?: number | null
+          yes_volume?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prediction_markets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prediction_trades: {
+        Row: {
+          amount: number
+          created_at: string | null
+          entry_probability: number
+          id: string
+          market_id: string
+          payout: number | null
+          prediction: string
+          resolved_at: string | null
+          shares: number
+          status: string
+          user_id: string
+          wallet_type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          entry_probability: number
+          id?: string
+          market_id: string
+          payout?: number | null
+          prediction: string
+          resolved_at?: string | null
+          shares: number
+          status?: string
+          user_id: string
+          wallet_type?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          entry_probability?: number
+          id?: string
+          market_id?: string
+          payout?: number | null
+          prediction?: string
+          resolved_at?: string | null
+          shares?: number
+          status?: string
+          user_id?: string
+          wallet_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prediction_trades_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "prediction_markets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prediction_trades_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -196,144 +369,277 @@ export type Database = {
           },
         ]
       }
+      tasks: {
+        Row: {
+          claimed_at: string | null
+          created_at: string | null
+          id: string
+          roi_amount: number | null
+          roi_percentage: number | null
+          status: string
+          task_number: number
+          user_id: string
+          user_package_id: string
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          created_at?: string | null
+          id?: string
+          roi_amount?: number | null
+          roi_percentage?: number | null
+          status?: string
+          task_number: number
+          user_id: string
+          user_package_id: string
+          window_end: string
+          window_start: string
+        }
+        Update: {
+          claimed_at?: string | null
+          created_at?: string | null
+          id?: string
+          roi_amount?: number | null
+          roi_percentage?: number | null
+          status?: string
+          task_number?: number
+          user_id?: string
+          user_package_id?: string
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_user_package_id_fkey"
+            columns: ["user_package_id"]
+            isOneToOne: false
+            referencedRelation: "user_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_positions: {
+        Row: {
+          amount: number
+          auto_close: boolean | null
+          closed_at: string | null
+          created_at: string | null
+          direction: string
+          entry_price: number
+          exit_price: number | null
+          id: string
+          is_demo: boolean | null
+          leverage: number
+          opened_at: string | null
+          profit_loss: number | null
+          status: string
+          stop_loss: number | null
+          symbol: string
+          take_profit: number | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          auto_close?: boolean | null
+          closed_at?: string | null
+          created_at?: string | null
+          direction: string
+          entry_price: number
+          exit_price?: number | null
+          id?: string
+          is_demo?: boolean | null
+          leverage?: number
+          opened_at?: string | null
+          profit_loss?: number | null
+          status?: string
+          stop_loss?: number | null
+          symbol: string
+          take_profit?: number | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          auto_close?: boolean | null
+          closed_at?: string | null
+          created_at?: string | null
+          direction?: string
+          entry_price?: number
+          exit_price?: number | null
+          id?: string
+          is_demo?: boolean | null
+          leverage?: number
+          opened_at?: string | null
+          profit_loss?: number | null
+          status?: string
+          stop_loss?: number | null
+          symbol?: string
+          take_profit?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_positions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
-          admin_notes: string | null
+          admin_note: string | null
           amount: number
           approved_at: string | null
           approved_by: string | null
           created_at: string | null
-          description: string | null
-          fee_amount: number | null
-          from_wallet: string | null
+          fee: number | null
+          from_user_id: string | null
           hash_key: string | null
           id: string
-          net_amount: number | null
-          recipient_id: string | null
-          status: string | null
-          to_wallet: string | null
+          net_amount: number
+          package_id: string | null
+          status: string
+          to_user_id: string | null
           type: string
           updated_at: string | null
           user_id: string
           wallet_address: string | null
-          wallet_type: string | null
+          wallet_type: string
         }
         Insert: {
-          admin_notes?: string | null
+          admin_note?: string | null
           amount: number
           approved_at?: string | null
           approved_by?: string | null
           created_at?: string | null
-          description?: string | null
-          fee_amount?: number | null
-          from_wallet?: string | null
+          fee?: number | null
+          from_user_id?: string | null
           hash_key?: string | null
           id?: string
-          net_amount?: number | null
-          recipient_id?: string | null
-          status?: string | null
-          to_wallet?: string | null
+          net_amount: number
+          package_id?: string | null
+          status?: string
+          to_user_id?: string | null
           type: string
           updated_at?: string | null
           user_id: string
           wallet_address?: string | null
-          wallet_type?: string | null
+          wallet_type: string
         }
         Update: {
-          admin_notes?: string | null
+          admin_note?: string | null
           amount?: number
           approved_at?: string | null
           approved_by?: string | null
           created_at?: string | null
-          description?: string | null
-          fee_amount?: number | null
-          from_wallet?: string | null
+          fee?: number | null
+          from_user_id?: string | null
           hash_key?: string | null
           id?: string
-          net_amount?: number | null
-          recipient_id?: string | null
-          status?: string | null
-          to_wallet?: string | null
+          net_amount?: number
+          package_id?: string | null
+          status?: string
+          to_user_id?: string | null
           type?: string
           updated_at?: string | null
           user_id?: string
           wallet_address?: string | null
-          wallet_type?: string | null
+          wallet_type?: string
         }
         Relationships: [
           {
             foreignKeyName: "transactions_approved_by_fkey"
             columns: ["approved_by"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "transactions_recipient_id_fkey"
-            columns: ["recipient_id"]
+            foreignKeyName: "transactions_from_user_id_fkey"
+            columns: ["from_user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_to_user_id_fkey"
+            columns: ["to_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "transactions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
       }
       user_packages: {
         Row: {
-          claims_count: number | null
           completed_at: string | null
-          created_at: string | null
+          current_roi_earned: number | null
+          deposit_amount: number
           id: string
-          investment_amount: number
-          last_claim_at: string | null
+          is_active: boolean | null
+          is_completed: boolean | null
+          last_task_time: string | null
           max_roi_percentage: number
-          missed_claims: number | null
-          next_claim_at: string | null
+          next_task_time: string | null
           package_id: string
           purchased_at: string | null
-          roi_percentage_earned: number | null
-          status: string | null
-          total_roi_earned: number | null
+          tasks_completed: number | null
+          total_roi_percentage: number | null
           user_id: string
         }
         Insert: {
-          claims_count?: number | null
           completed_at?: string | null
-          created_at?: string | null
+          current_roi_earned?: number | null
+          deposit_amount: number
           id?: string
-          investment_amount: number
-          last_claim_at?: string | null
+          is_active?: boolean | null
+          is_completed?: boolean | null
+          last_task_time?: string | null
           max_roi_percentage: number
-          missed_claims?: number | null
-          next_claim_at?: string | null
+          next_task_time?: string | null
           package_id: string
           purchased_at?: string | null
-          roi_percentage_earned?: number | null
-          status?: string | null
-          total_roi_earned?: number | null
+          tasks_completed?: number | null
+          total_roi_percentage?: number | null
           user_id: string
         }
         Update: {
-          claims_count?: number | null
           completed_at?: string | null
-          created_at?: string | null
+          current_roi_earned?: number | null
+          deposit_amount?: number
           id?: string
-          investment_amount?: number
-          last_claim_at?: string | null
+          is_active?: boolean | null
+          is_completed?: boolean | null
+          last_task_time?: string | null
           max_roi_percentage?: number
-          missed_claims?: number | null
-          next_claim_at?: string | null
+          next_task_time?: string | null
           package_id?: string
           purchased_at?: string | null
-          roi_percentage_earned?: number | null
-          status?: string | null
-          total_roi_earned?: number | null
+          tasks_completed?: number | null
+          total_roi_percentage?: number | null
           user_id?: string
         }
         Relationships: [
@@ -348,10 +654,76 @@ export type Database = {
             foreignKeyName: "user_packages_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
+      }
+      users: {
+        Row: {
+          account_status: string | null
+          created_at: string | null
+          direct_referrals: number | null
+          email: string
+          full_name: string | null
+          has_active_package: boolean | null
+          id: string
+          ip_address: string | null
+          last_login: string | null
+          phone: string | null
+          referral_code: string
+          referred_by: string | null
+          star_rank: number | null
+          team_volume: number | null
+          total_commission_earned: number | null
+          total_deposit: number | null
+          total_roi_earned: number | null
+          total_withdrawal: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_status?: string | null
+          created_at?: string | null
+          direct_referrals?: number | null
+          email: string
+          full_name?: string | null
+          has_active_package?: boolean | null
+          id: string
+          ip_address?: string | null
+          last_login?: string | null
+          phone?: string | null
+          referral_code: string
+          referred_by?: string | null
+          star_rank?: number | null
+          team_volume?: number | null
+          total_commission_earned?: number | null
+          total_deposit?: number | null
+          total_roi_earned?: number | null
+          total_withdrawal?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_status?: string | null
+          created_at?: string | null
+          direct_referrals?: number | null
+          email?: string
+          full_name?: string | null
+          has_active_package?: boolean | null
+          id?: string
+          ip_address?: string | null
+          last_login?: string | null
+          phone?: string | null
+          referral_code?: string
+          referred_by?: string | null
+          star_rank?: number | null
+          team_volume?: number | null
+          total_commission_earned?: number | null
+          total_deposit?: number | null
+          total_roi_earned?: number | null
+          total_withdrawal?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       wallets: {
         Row: {
@@ -362,6 +734,8 @@ export type Database = {
           main_balance: number | null
           p2p_balance: number | null
           roi_balance: number | null
+          total_deposited: number | null
+          total_withdrawn: number | null
           updated_at: string | null
           user_id: string
         }
@@ -373,6 +747,8 @@ export type Database = {
           main_balance?: number | null
           p2p_balance?: number | null
           roi_balance?: number | null
+          total_deposited?: number | null
+          total_withdrawn?: number | null
           updated_at?: string | null
           user_id: string
         }
@@ -384,6 +760,8 @@ export type Database = {
           main_balance?: number | null
           p2p_balance?: number | null
           roi_balance?: number | null
+          total_deposited?: number | null
+          total_withdrawn?: number | null
           updated_at?: string | null
           user_id?: string
         }
@@ -392,7 +770,7 @@ export type Database = {
             foreignKeyName: "wallets_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -402,6 +780,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_referral_code: { Args: never; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
