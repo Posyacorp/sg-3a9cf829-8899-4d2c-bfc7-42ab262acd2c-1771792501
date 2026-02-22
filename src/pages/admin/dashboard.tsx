@@ -1,447 +1,575 @@
 import { SEO } from "@/components/SEO";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { 
-  TrendingUp, Users, DollarSign, Activity, Package, 
-  CheckCircle, XCircle, Clock, ArrowUpRight, Settings,
-  Eye, Edit, Trash2, Shield
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-
-interface User {
-  id: string;
-  username: string;
-  email: string;
-  totalDeposit: number;
-  totalWithdraw: number;
-  activePackages: number;
-  referrals: number;
-  status: "active" | "suspended" | "banned";
-  registered: number;
-}
-
-interface PendingTransaction {
-  id: string;
-  userId: string;
-  username: string;
-  type: "deposit" | "withdraw";
-  amount: number;
-  wallet: string;
-  hash?: string;
-  timestamp: number;
-}
-
-interface AdminStats {
-  totalUsers: number;
-  activeUsers: number;
-  totalDeposits: number;
-  totalWithdrawals: number;
-  pendingDeposits: number;
-  pendingWithdrawals: number;
-  totalProfit: number;
-  adminWallet: number;
-}
+import { Badge } from "@/components/ui/badge";
+import {
+  LayoutDashboard,
+  Users,
+  Package,
+  Wallet,
+  TrendingUp,
+  DollarSign,
+  Activity,
+  Settings,
+  Search,
+  Filter,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Eye,
+  Edit,
+  Ban,
+  Shield,
+  ArrowUpRight,
+  ArrowDownRight,
+  AlertCircle,
+  Download,
+  Calendar,
+  PieChart,
+  BarChart3,
+  LineChart
+} from "lucide-react";
+import {
+  LineChart as RechartsLine,
+  BarChart as RechartsBar,
+  PieChart as RechartsPie,
+  Pie,
+  Cell,
+  Line,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Area,
+  AreaChart
+} from "recharts";
 
 export default function AdminDashboard() {
-  const [stats] = useState<AdminStats>({
-    totalUsers: 1247,
-    activeUsers: 892,
-    totalDeposits: 458920.50,
-    totalWithdrawals: 234567.30,
-    pendingDeposits: 15,
-    pendingWithdrawals: 8,
-    totalProfit: 112176.60,
-    adminWallet: 89543.25
+  const [activeTab, setActiveTab] = useState("overview");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState("7d"); // 24h, 7d, 30d, 90d, 1y
+
+  // Mock data - Replace with real API calls
+  const [stats, setStats] = useState({
+    totalUsers: 12847,
+    activeUsers: 8432,
+    totalVolume: 4523000,
+    totalEarnings: 226150,
+    pendingDeposits: 23,
+    pendingWithdrawals: 15,
+    activePackages: 3421,
+    totalCommissions: 156780
   });
 
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: "1",
-      username: "user123",
-      email: "user123@email.com",
-      totalDeposit: 5000,
-      totalWithdraw: 2500,
-      activePackages: 2,
-      referrals: 15,
-      status: "active",
-      registered: Date.now() - 1000 * 60 * 60 * 24 * 30
-    },
-    {
-      id: "2",
-      username: "trader456",
-      email: "trader456@email.com",
-      totalDeposit: 10000,
-      totalWithdraw: 5000,
-      activePackages: 3,
-      referrals: 45,
-      status: "active",
-      registered: Date.now() - 1000 * 60 * 60 * 24 * 60
-    }
-  ]);
+  // Revenue Analytics Data (7 days)
+  const revenueData = [
+    { date: "Mon", deposits: 45000, withdrawals: 12000, netRevenue: 33000, adminFees: 2250 },
+    { date: "Tue", deposits: 52000, withdrawals: 18000, netRevenue: 34000, adminFees: 2600 },
+    { date: "Wed", deposits: 48000, withdrawals: 15000, netRevenue: 33000, adminFees: 2400 },
+    { date: "Thu", deposits: 61000, withdrawals: 22000, netRevenue: 39000, adminFees: 3050 },
+    { date: "Fri", deposits: 73000, withdrawals: 28000, netRevenue: 45000, adminFees: 3650 },
+    { date: "Sat", deposits: 68000, withdrawals: 25000, netRevenue: 43000, adminFees: 3400 },
+    { date: "Sun", deposits: 58000, withdrawals: 20000, netRevenue: 38000, adminFees: 2900 }
+  ];
 
-  const [pendingTransactions, setPendingTransactions] = useState<PendingTransaction[]>([
-    {
-      id: "1",
-      userId: "user1",
-      username: "user123",
-      type: "deposit",
-      amount: 100,
-      wallet: "main",
-      hash: "0x1234567890abcdef",
-      timestamp: Date.now() - 1000 * 60 * 30
-    },
-    {
-      id: "2",
-      userId: "user2",
-      username: "trader456",
-      type: "withdraw",
-      amount: 500,
-      wallet: "roi",
-      timestamp: Date.now() - 1000 * 60 * 45
-    }
-  ]);
+  // User Growth Data
+  const userGrowthData = [
+    { month: "Jan", users: 1250, active: 890 },
+    { month: "Feb", users: 2100, active: 1520 },
+    { month: "Mar", users: 3450, active: 2340 },
+    { month: "Apr", users: 5200, active: 3680 },
+    { month: "May", users: 7300, active: 5210 },
+    { month: "Jun", users: 9800, active: 6890 },
+    { month: "Jul", users: 12847, active: 8432 }
+  ];
 
-  const approveTransaction = (txId: string) => {
-    setPendingTransactions(pendingTransactions.filter(tx => tx.id !== txId));
-    alert("Transaction approved and processed");
-  };
+  // Package Distribution
+  const packageDistribution = [
+    { name: "Starter (30)", value: 3456, percentage: 27, color: "#8b5cf6" },
+    { name: "Bronze (100)", value: 2890, percentage: 22, color: "#a78bfa" },
+    { name: "Silver (250)", value: 2145, percentage: 17, color: "#c084fc" },
+    { name: "Gold (750)", value: 1678, percentage: 13, color: "#e879f9" },
+    { name: "Platinum (2.5K)", value: 1234, percentage: 10, color: "#f0abfc" },
+    { name: "Diamond (5K)", value: 892, percentage: 7, color: "#fae8ff" },
+    { name: "Premium (7.5K)", value: 456, percentage: 3, color: "#fdf4ff" },
+    { name: "Royal (10K)", value: 123, percentage: 1, color: "#faf5ff" }
+  ];
 
-  const rejectTransaction = (txId: string) => {
-    setPendingTransactions(pendingTransactions.filter(tx => tx.id !== txId));
-    alert("Transaction rejected");
-  };
+  // Transaction Volume by Type
+  const transactionVolume = [
+    { type: "Deposits", count: 3456, volume: 405000, avgSize: 117 },
+    { type: "Withdrawals", count: 1890, volume: 180000, avgSize: 95 },
+    { type: "P2P Transfers", count: 2345, volume: 89000, avgSize: 38 },
+    { type: "ROI Claims", count: 8923, volume: 267000, avgSize: 30 },
+    { type: "Commissions", count: 5678, volume: 156780, avgSize: 28 }
+  ];
 
-  const updateUserStatus = (userId: string, status: "active" | "suspended" | "banned") => {
-    setUsers(users.map(user => 
-      user.id === userId ? { ...user, status } : user
-    ));
-    alert(`User status updated to ${status}`);
-  };
+  // MLM Level Performance
+  const mlmLevelData = [
+    { level: "L1", users: 2456, volume: 456000, commission: 13680, rate: "3%" },
+    { level: "L2", users: 4893, volume: 823000, commission: 16460, rate: "2%" },
+    { level: "L3", users: 8234, volume: 1234000, commission: 12340, rate: "1%" },
+    { level: "L4-6", users: 15678, volume: 1890000, commission: 28350, rate: "0.5%" },
+    { level: "L7-18", users: 34567, volume: 2345000, commission: 87938, rate: "0.25%" },
+    { level: "L19-24", users: 12890, volume: 890000, commission: 15420, rate: "0.5%-3%" }
+  ];
+
+  // Platform Earnings Breakdown
+  const platformEarnings = [
+    { source: "Package Entry (5%)", amount: 22615, percentage: 45, color: "#8b5cf6" },
+    { source: "Withdrawal Tax (50%)", amount: 15000, percentage: 30, color: "#a78bfa" },
+    { source: "P2P Fees (1%)", amount: 890, percentage: 2, color: "#c084fc" },
+    { source: "Trading Losses", amount: 11645, percentage: 23, color: "#e879f9" }
+  ];
+
+  // ROI Claims Activity (Hourly for today)
+  const roiClaimsData = [
+    { hour: "00:00", claims: 45, missed: 12, amount: 1350 },
+    { hour: "03:00", claims: 67, missed: 18, amount: 2010 },
+    { hour: "06:00", claims: 89, missed: 23, amount: 2670 },
+    { hour: "09:00", claims: 134, missed: 34, amount: 4020 },
+    { hour: "12:00", claims: 156, missed: 41, amount: 4680 },
+    { hour: "15:00", claims: 178, missed: 45, amount: 5340 },
+    { hour: "18:00", claims: 145, missed: 38, amount: 4350 },
+    { hour: "21:00", claims: 123, missed: 32, amount: 3690 }
+  ];
+
+  // Active Users Timeline (24 hours)
+  const activeUsersData = [
+    { time: "00:00", online: 234, trading: 89, claiming: 45 },
+    { time: "03:00", online: 189, trading: 67, claiming: 34 },
+    { time: "06:00", online: 267, trading: 98, claiming: 56 },
+    { time: "09:00", online: 456, trading: 178, claiming: 89 },
+    { time: "12:00", online: 589, trading: 234, claiming: 123 },
+    { time: "15:00", online: 678, trading: 289, claiming: 145 },
+    { time: "18:00", online: 734, trading: 312, claiming: 167 },
+    { time: "21:00", online: 612, trading: 245, claiming: 134 }
+  ];
+
+  const COLORS = ['#8b5cf6', '#a78bfa', '#c084fc', '#e879f9', '#f0abfc', '#fae8ff', '#fdf4ff', '#faf5ff'];
 
   return (
     <>
-      <SEO title="Admin Dashboard - Sui24" />
+      <SEO 
+        title="Admin Dashboard - Sui24.trade"
+        description="Administrative control panel for Sui24.trade platform"
+      />
       
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900">
         {/* Header */}
-        <header className="border-b border-purple-500/20 backdrop-blur-xl bg-slate-950/50">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-2xl font-black text-white">ADMIN PANEL</span>
-              </div>
-              
+        <header className="border-b border-white/10 bg-black/20 backdrop-blur-sm sticky top-0 z-50">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-4">
-                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 px-4 py-2">
-                  Admin Wallet: {stats.adminWallet.toFixed(2)} SUI
-                </Badge>
-                <Link href="/admin/settings">
-                  <Button variant="outline" className="border-purple-500/50 text-purple-300">
-                    <Settings className="w-4 h-4 mr-2" />
-                    Settings
+                <Shield className="w-8 h-8 text-purple-400" />
+                <div>
+                  <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
+                  <p className="text-xs text-white/60">Master Control Panel</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+                <Link href="/dashboard">
+                  <Button variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10">
+                    User View
                   </Button>
                 </Link>
-                <Button variant="outline" className="border-red-500/50 text-red-300 hover:bg-red-500/10">
-                  Logout
-                </Button>
               </div>
             </div>
           </div>
         </header>
 
-        <div className="container mx-auto px-4 py-8">
-          {/* Stats Grid */}
-          <div className="grid md:grid-cols-4 gap-6 mb-8">
-            <Card className="p-6 bg-slate-900/50 border-purple-500/20 backdrop-blur-xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">Total Users</span>
-                <Users className="w-5 h-5 text-purple-400" />
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Quick Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-white/60 mb-1">Total Users</p>
+                  <p className="text-3xl font-black text-white">{stats.totalUsers.toLocaleString()}</p>
+                  <p className="text-xs text-green-400 mt-2 flex items-center gap-1">
+                    <ArrowUpRight className="w-3 h-3" />
+                    +12.5% vs last week
+                  </p>
+                </div>
+                <Users className="w-12 h-12 text-purple-400 opacity-50" />
               </div>
-              <p className="text-3xl font-black text-white">{stats.totalUsers.toLocaleString()}</p>
-              <p className="text-xs text-green-400 mt-1">+{stats.activeUsers} active</p>
             </Card>
 
-            <Card className="p-6 bg-slate-900/50 border-green-500/20 backdrop-blur-xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">Total Deposits</span>
-                <ArrowUpRight className="w-5 h-5 text-green-400" />
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-white/60 mb-1">Total Volume</p>
+                  <p className="text-3xl font-black text-white">${(stats.totalVolume / 1000).toFixed(1)}M</p>
+                  <p className="text-xs text-green-400 mt-2 flex items-center gap-1">
+                    <ArrowUpRight className="w-3 h-3" />
+                    +8.3% vs last week
+                  </p>
+                </div>
+                <TrendingUp className="w-12 h-12 text-green-400 opacity-50" />
               </div>
-              <p className="text-3xl font-black text-white">{stats.totalDeposits.toFixed(0)} SUI</p>
-              <p className="text-xs text-yellow-400 mt-1">{stats.pendingDeposits} pending</p>
             </Card>
 
-            <Card className="p-6 bg-slate-900/50 border-red-500/20 backdrop-blur-xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">Total Withdrawals</span>
-                <DollarSign className="w-5 h-5 text-red-400" />
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-white/60 mb-1">Platform Earnings</p>
+                  <p className="text-3xl font-black text-white">${stats.totalEarnings.toLocaleString()}</p>
+                  <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1">
+                    <DollarSign className="w-3 h-3" />
+                    Secret Admin Wallet
+                  </p>
+                </div>
+                <Wallet className="w-12 h-12 text-yellow-400 opacity-50" />
               </div>
-              <p className="text-3xl font-black text-white">{stats.totalWithdrawals.toFixed(0)} SUI</p>
-              <p className="text-xs text-yellow-400 mt-1">{stats.pendingWithdrawals} pending</p>
             </Card>
 
-            <Card className="p-6 bg-slate-900/50 border-blue-500/20 backdrop-blur-xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">Platform Profit</span>
-                <Activity className="w-5 h-5 text-blue-400" />
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-white/60 mb-1">Active Packages</p>
+                  <p className="text-3xl font-black text-white">{stats.activePackages.toLocaleString()}</p>
+                  <p className="text-xs text-blue-400 mt-2 flex items-center gap-1">
+                    <Package className="w-3 h-3" />
+                    Earning ROI
+                  </p>
+                </div>
+                <Activity className="w-12 h-12 text-blue-400 opacity-50" />
               </div>
-              <p className="text-3xl font-black text-white">{stats.totalProfit.toFixed(0)} SUI</p>
-              <p className="text-xs text-gray-400 mt-1">5% fees + 50% tax</p>
             </Card>
           </div>
 
-          {/* Main Content */}
-          <Tabs defaultValue="pending" className="space-y-6">
-            <TabsList className="w-full grid grid-cols-4 bg-slate-900/50">
-              <TabsTrigger value="pending">Pending Transactions</TabsTrigger>
-              <TabsTrigger value="users">User Management</TabsTrigger>
-              <TabsTrigger value="packages">Package Management</TabsTrigger>
-              <TabsTrigger value="settings">Platform Settings</TabsTrigger>
-            </TabsList>
+          {/* Period Selector */}
+          <div className="flex items-center gap-2 mb-6">
+            <Calendar className="w-5 h-5 text-white/60" />
+            <div className="flex gap-2">
+              {["24h", "7d", "30d", "90d", "1y"].map((period) => (
+                <Button
+                  key={period}
+                  size="sm"
+                  variant={selectedPeriod === period ? "default" : "outline"}
+                  className={selectedPeriod === period 
+                    ? "bg-purple-500 hover:bg-purple-600" 
+                    : "border-white/20 text-white hover:bg-white/10"
+                  }
+                  onClick={() => setSelectedPeriod(period)}
+                >
+                  {period}
+                </Button>
+              ))}
+            </div>
+          </div>
 
-            {/* Pending Transactions */}
-            <TabsContent value="pending">
-              <Card className="p-6 bg-slate-900/50 border-purple-500/20 backdrop-blur-xl">
-                <h2 className="text-2xl font-black text-white mb-6">Pending Transactions</h2>
-                <div className="space-y-4">
-                  {pendingTransactions.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Clock className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400">No pending transactions</p>
-                    </div>
-                  ) : (
-                    pendingTransactions.map((tx) => (
-                      <div key={tx.id} className="p-4 bg-slate-950/50 rounded-lg border border-purple-500/10">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <Badge className={
-                                tx.type === "deposit" 
-                                  ? "bg-green-500/20 text-green-400" 
-                                  : "bg-red-500/20 text-red-400"
-                              }>
-                                {tx.type.toUpperCase()}
-                              </Badge>
-                              <span className="text-white font-semibold">{tx.username}</span>
-                            </div>
-                            <div className="text-sm text-gray-400 space-y-1">
-                              <p>Amount: <span className="text-white font-bold">{tx.amount} SUI</span></p>
-                              <p>Wallet: <span className="text-purple-400">{tx.wallet}</span></p>
-                              {tx.hash && <p>Hash: <span className="text-gray-500 font-mono text-xs">{tx.hash}</span></p>}
-                              <p>Time: {new Date(tx.timestamp).toLocaleString()}</p>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => approveTransaction(tx.id)}
-                              className="bg-green-500 hover:bg-green-600"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Approve
-                            </Button>
-                            <Button
-                              onClick={() => rejectTransaction(tx.id)}
-                              variant="destructive"
-                            >
-                              <XCircle className="w-4 h-4 mr-2" />
-                              Reject
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Revenue Analytics */}
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <LineChart className="w-5 h-5 text-purple-400" />
+                    Revenue Analytics
+                  </h3>
+                  <p className="text-sm text-white/60">Daily income breakdown</p>
                 </div>
-              </Card>
-            </TabsContent>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={revenueData}>
+                  <defs>
+                    <linearGradient id="colorDeposits" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorWithdrawals" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorAdminFees" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                  <XAxis dataKey="date" stroke="#ffffff60" />
+                  <YAxis stroke="#ffffff60" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1a0b2e', 
+                      border: '1px solid #8b5cf6',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: '#fff' }}
+                  />
+                  <Legend />
+                  <Area type="monotone" dataKey="deposits" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorDeposits)" />
+                  <Area type="monotone" dataKey="withdrawals" stroke="#ef4444" fillOpacity={1} fill="url(#colorWithdrawals)" />
+                  <Area type="monotone" dataKey="adminFees" stroke="#22c55e" fillOpacity={1} fill="url(#colorAdminFees)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Card>
 
-            {/* User Management */}
-            <TabsContent value="users">
-              <Card className="p-6 bg-slate-900/50 border-purple-500/20 backdrop-blur-xl">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-black text-white">User Management</h2>
-                  <div className="flex gap-3">
-                    <Input
-                      placeholder="Search users..."
-                      className="bg-slate-950 border-purple-500/30 text-white w-64"
-                    />
-                    <Button className="bg-purple-500 hover:bg-purple-600">
-                      <Users className="w-4 h-4 mr-2" />
-                      Add User
-                    </Button>
-                  </div>
+            {/* User Growth Chart */}
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-green-400" />
+                    User Growth
+                  </h3>
+                  <p className="text-sm text-white/60">Total vs active users</p>
                 </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsLine data={userGrowthData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                  <XAxis dataKey="month" stroke="#ffffff60" />
+                  <YAxis stroke="#ffffff60" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1a0b2e', 
+                      border: '1px solid #8b5cf6',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: '#fff' }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="users" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6', r: 4 }} />
+                  <Line type="monotone" dataKey="active" stroke="#22c55e" strokeWidth={3} dot={{ fill: '#22c55e', r: 4 }} />
+                </RechartsLine>
+              </ResponsiveContainer>
+            </Card>
 
-                <div className="space-y-3">
-                  {users.map((user) => (
-                    <div key={user.id} className="p-4 bg-slate-950/50 rounded-lg border border-purple-500/10">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <span className="text-white font-bold">{user.username}</span>
-                            <Badge className={
-                              user.status === "active" ? "bg-green-500/20 text-green-400" :
-                              user.status === "suspended" ? "bg-yellow-500/20 text-yellow-400" :
-                              "bg-red-500/20 text-red-400"
-                            }>
-                              {user.status}
-                            </Badge>
-                          </div>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-400">
-                            <div>
-                              <span className="text-xs">Email:</span>
-                              <p className="text-white">{user.email}</p>
-                            </div>
-                            <div>
-                              <span className="text-xs">Deposits:</span>
-                              <p className="text-green-400 font-bold">{user.totalDeposit} SUI</p>
-                            </div>
-                            <div>
-                              <span className="text-xs">Withdrawals:</span>
-                              <p className="text-red-400 font-bold">{user.totalWithdraw} SUI</p>
-                            </div>
-                            <div>
-                              <span className="text-xs">Referrals:</span>
-                              <p className="text-purple-400 font-bold">{user.referrals}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-purple-500/50 text-purple-300"
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            View
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-blue-500/50 text-blue-300"
-                          >
-                            <Edit className="w-4 h-4 mr-1" />
-                            Edit
-                          </Button>
-                          {user.status === "active" ? (
-                            <Button
-                              size="sm"
-                              onClick={() => updateUserStatus(user.id, "suspended")}
-                              variant="outline"
-                              className="border-yellow-500/50 text-yellow-300"
-                            >
-                              Suspend
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={() => updateUserStatus(user.id, "active")}
-                              variant="outline"
-                              className="border-green-500/50 text-green-300"
-                            >
-                              Activate
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+            {/* Package Distribution */}
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <PieChart className="w-5 h-5 text-pink-400" />
+                    Package Distribution
+                  </h3>
+                  <p className="text-sm text-white/60">Investment package popularity</p>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsPie>
+                  <Pie
+                    data={packageDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={(entry) => `${entry.percentage}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {packageDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1a0b2e', 
+                      border: '1px solid #8b5cf6',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend />
+                </RechartsPie>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* Transaction Volume */}
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-400" />
+                    Transaction Volume
+                  </h3>
+                  <p className="text-sm text-white/60">By transaction type</p>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBar data={transactionVolume}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                  <XAxis dataKey="type" stroke="#ffffff60" angle={-15} textAnchor="end" height={80} />
+                  <YAxis stroke="#ffffff60" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1a0b2e', 
+                      border: '1px solid #8b5cf6',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="volume" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                </RechartsBar>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* Platform Earnings Breakdown */}
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-yellow-400" />
+                    Platform Earnings
+                  </h3>
+                  <p className="text-sm text-white/60">Revenue sources breakdown</p>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsPie>
+                  <Pie
+                    data={platformEarnings}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={(entry) => `${entry.percentage}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="amount"
+                  >
+                    {platformEarnings.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1a0b2e', 
+                      border: '1px solid #8b5cf6',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: number) => `$${value.toLocaleString()}`}
+                  />
+                  <Legend />
+                </RechartsPie>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* ROI Claims Activity */}
+            <Card className="glass-effect border-white/10 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-green-400" />
+                    ROI Claims Activity
+                  </h3>
+                  <p className="text-sm text-white/60">3-hour interval claims</p>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBar data={roiClaimsData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                  <XAxis dataKey="hour" stroke="#ffffff60" />
+                  <YAxis stroke="#ffffff60" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1a0b2e', 
+                      border: '1px solid #8b5cf6',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="claims" fill="#22c55e" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="missed" fill="#ef4444" radius={[8, 8, 0, 0]} />
+                </RechartsBar>
+              </ResponsiveContainer>
+            </Card>
+          </div>
+
+          {/* MLM Level Performance Table */}
+          <Card className="glass-effect border-white/10 p-6 mb-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-400" />
+                  MLM Level Performance
+                </h3>
+                <p className="text-sm text-white/60">24-level commission breakdown</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left text-white/60 py-3 px-4">Level</th>
+                    <th className="text-left text-white/60 py-3 px-4">Users</th>
+                    <th className="text-left text-white/60 py-3 px-4">Volume</th>
+                    <th className="text-left text-white/60 py-3 px-4">Commission</th>
+                    <th className="text-left text-white/60 py-3 px-4">Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mlmLevelData.map((level, idx) => (
+                    <tr key={idx} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="py-3 px-4 text-white font-semibold">{level.level}</td>
+                      <td className="py-3 px-4 text-white/80">{level.users.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-white/80">${level.volume.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-green-400 font-bold">${level.commission.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-purple-400">{level.rate}</td>
+                    </tr>
                   ))}
-                </div>
-              </Card>
-            </TabsContent>
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
-            {/* Package Management */}
-            <TabsContent value="packages">
-              <Card className="p-6 bg-slate-900/50 border-purple-500/20 backdrop-blur-xl">
-                <h2 className="text-2xl font-black text-white mb-6">Package Configuration</h2>
-                <div className="grid md:grid-cols-2 gap-4">
-                  {[
-                    { name: "Starter", deposit: 30, roi: 220 },
-                    { name: "Bronze", deposit: 100, roi: 230 },
-                    { name: "Silver", deposit: 250, roi: 240 },
-                    { name: "Gold", deposit: 750, roi: 250 },
-                    { name: "Platinum", deposit: 2500, roi: 260 },
-                    { name: "Diamond", deposit: 5000, roi: 270 },
-                    { name: "Elite", deposit: 7500, roi: 280 },
-                    { name: "Master", deposit: 10000, roi: 290 },
-                    { name: "Legend", deposit: 15000, roi: 300 }
-                  ].map((pkg, idx) => (
-                    <div key={idx} className="p-4 bg-slate-950/50 rounded-lg border border-purple-500/10">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-lg font-bold text-white">{pkg.name}</h3>
-                        <Button size="sm" variant="outline" className="border-purple-500/50">
-                          <Edit className="w-3 h-3 mr-1" />
-                          Edit
-                        </Button>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Deposit:</span>
-                          <span className="text-white font-semibold">{pkg.deposit} SUI</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Max ROI:</span>
-                          <span className="text-green-400 font-semibold">{pkg.roi}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </TabsContent>
-
-            {/* Platform Settings */}
-            <TabsContent value="settings">
-              <Card className="p-6 bg-slate-900/50 border-purple-500/20 backdrop-blur-xl">
-                <h2 className="text-2xl font-black text-white mb-6">Platform Settings</h2>
-                <div className="space-y-6">
-                  <div className="p-4 bg-slate-950/50 rounded-lg space-y-4">
-                    <h3 className="text-lg font-bold text-white">Fee Configuration</h3>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-gray-400 text-sm">Platform Entry Fee</label>
-                        <Input defaultValue="5" className="bg-slate-900 border-purple-500/30 text-white mt-2" />
-                        <p className="text-xs text-gray-500 mt-1">Percentage taken on package purchase</p>
-                      </div>
-                      <div>
-                        <label className="text-gray-400 text-sm">Withdrawal Tax</label>
-                        <Input defaultValue="50" className="bg-slate-900 border-purple-500/30 text-white mt-2" />
-                        <p className="text-xs text-gray-500 mt-1">Percentage taken on external withdrawals</p>
-                      </div>
-                      <div>
-                        <label className="text-gray-400 text-sm">P2P Transfer Fee</label>
-                        <Input defaultValue="1" className="bg-slate-900 border-purple-500/30 text-white mt-2" />
-                        <p className="text-xs text-gray-500 mt-1">Percentage taken on P2P transfers</p>
-                      </div>
-                      <div>
-                        <label className="text-gray-400 text-sm">Max Daily ROI</label>
-                        <Input defaultValue="10" className="bg-slate-900 border-purple-500/30 text-white mt-2" />
-                        <p className="text-xs text-gray-500 mt-1">Maximum ROI percentage per day</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-slate-950/50 rounded-lg space-y-4">
-                    <h3 className="text-lg font-bold text-white">Admin Wallet Address</h3>
-                    <Input 
-                      defaultValue="0xSUI24AdminWalletAddress123456789" 
-                      className="bg-slate-900 border-purple-500/30 text-white font-mono"
-                    />
-                  </div>
-
-                  <Button className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 h-12">
-                    Save Settings
-                  </Button>
-                </div>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          {/* Active Users Timeline */}
+          <Card className="glass-effect border-white/10 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-blue-400" />
+                  Active Users Timeline
+                </h3>
+                <p className="text-sm text-white/60">Real-time user activity (24h)</p>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={activeUsersData}>
+                <defs>
+                  <linearGradient id="colorOnline" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorTrading" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorClaiming" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#eab308" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                <XAxis dataKey="time" stroke="#ffffff60" />
+                <YAxis stroke="#ffffff60" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#1a0b2e', 
+                    border: '1px solid #8b5cf6',
+                    borderRadius: '8px'
+                  }}
+                  labelStyle={{ color: '#fff' }}
+                />
+                <Legend />
+                <Area type="monotone" dataKey="online" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorOnline)" />
+                <Area type="monotone" dataKey="trading" stroke="#22c55e" fillOpacity={1} fill="url(#colorTrading)" />
+                <Area type="monotone" dataKey="claiming" stroke="#eab308" fillOpacity={1} fill="url(#colorClaiming)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
         </div>
       </div>
     </>
