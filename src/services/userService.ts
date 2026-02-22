@@ -161,7 +161,7 @@ export async function getUserDownlineCount(userId: string) {
   try {
     const { count, error } = await supabase
       .from("users")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("referred_by", userId);
 
     if (error) return { success: false, error: error.message };
@@ -178,9 +178,9 @@ export async function hasActivePackage(userId: string) {
   try {
     const { count, error } = await supabase
       .from("user_packages")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
-      .eq("status", "active");
+      .eq("is_active", true);
 
     if (error) {
       return { success: false, error: error.message };
