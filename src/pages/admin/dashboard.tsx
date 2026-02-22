@@ -1,5 +1,6 @@
 import { SEO } from "@/components/SEO";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,7 +32,9 @@ import {
   Calendar,
   PieChart,
   BarChart3,
-  LineChart
+  LineChart,
+  FileText,
+  Table as TableIcon
 } from "lucide-react";
 import {
   LineChart as RechartsLine,
@@ -50,11 +53,18 @@ import {
   Area,
   AreaChart
 } from "recharts";
+import {
+  exportDashboardToPDF,
+  exportToCSV,
+  exportMultipleToCSV,
+  exportChartToPDF,
+} from "@/lib/exportUtils";
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState("overview");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedPeriod, setSelectedPeriod] = useState("7d"); // 24h, 7d, 30d, 90d, 1y
+  const [selectedPeriod, setSelectedPeriod] = useState<"24h" | "7d" | "30d" | "90d" | "1y">("7d");
+  const revenueChartRef = useRef<HTMLDivElement>(null);
+  const userGrowthChartRef = useRef<HTMLDivElement>(null);
+  const packageChartRef = useRef<HTMLDivElement>(null);
 
   // Mock data - Replace with real API calls
   const [stats, setStats] = useState({
@@ -154,6 +164,49 @@ export default function AdminDashboard() {
   ];
 
   const COLORS = ['#8b5cf6', '#a78bfa', '#c084fc', '#e879f9', '#f0abfc', '#fae8ff', '#fdf4ff', '#faf5ff'];
+
+  // Export Handlers
+  const handleExportFullPDF = async () => {
+    await exportDashboardToPDF(
+      {
+        totalUsers: 12847,
+        totalVolume: "$4.5M",
+        platformEarnings: "$226,150",
+        activePackages: 3421,
+      },
+      revenueData,
+      userGrowthData,
+      packageDistribution,
+      transactionVolume,
+      mlmLevelData,
+      platformEarnings,
+      "sui24_admin_dashboard"
+    );
+  };
+
+  const handleExportAllCSV = () => {
+    exportMultipleToCSV(
+      [
+        { name: "Revenue Analytics", data: revenueData },
+        { name: "User Growth", data: userGrowthData },
+        { name: "Package Distribution", data: packageDistribution },
+        { name: "Transaction Volume", data: transactionVolume },
+        { name: "MLM Performance", data: mlmLevelData },
+        { name: "Platform Earnings", data: platformEarnings },
+      ],
+      "sui24_dashboard_data"
+    );
+  };
+
+  const handleExportRevenuePDF = async () => {
+    if (revenueChartRef.current) {
+      await exportChartToPDF(
+        revenueChartRef.current,
+        "Revenue Analytics - Last 7 Days",
+        "sui24_revenue_chart"
+      );
+    }
+  };
 
   return (
     <>
@@ -270,19 +323,49 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* Export Actions */}
+          <Card className="p-6 bg-gradient-to-br from-purple-900/20 to-pink-900/20 border-purple-500/20">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold mb-1">📊 Export Dashboard Data</h3>
+                <p className="text-sm text-gray-400">Download reports in PDF or CSV format</p>
+              </div>
+              
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={handleExportFullPDF}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Export Full Report (PDF)
+                </Button>
+                
+                <Button
+                  onClick={handleExportAllCSV}
+                  variant="outline"
+                  className="border-purple-500/30 hover:bg-purple-500/10"
+                >
+                  <TableIcon className="w-4 h-4 mr-2" />
+                  Export All Data (CSV)
+                </Button>
+                
+                <Button
+                  onClick={handleExportRevenuePDF}
+                  variant="outline"
+                  className="border-pink-500/30 hover:bg-pink-500/10"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Revenue Chart (PDF)
+                </Button>
+              </div>
+            </div>
+          </Card>
+
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Revenue Analytics */}
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <LineChart className="w-5 h-5 text-purple-400" />
-                    Revenue Analytics
-                  </h3>
-                  <p className="text-sm text-white/60">Daily income breakdown</p>
-                </div>
-              </div>
+            <Card className="p-6 col-span-2" ref={revenueChartRef}>
+              <h3 className="text-lg font-semibold mb-4">💰 Revenue Analytics</h3>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={revenueData}>
                   <defs>
