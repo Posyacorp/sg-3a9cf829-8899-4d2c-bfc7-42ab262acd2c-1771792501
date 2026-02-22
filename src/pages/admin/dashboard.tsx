@@ -59,10 +59,13 @@ import {
   exportMultipleToCSV,
   exportChartToPDF,
 } from "@/lib/exportUtils";
+import { useRouter } from "next/router";
+import { authService } from "@/services/authService";
 
 type Period = "24h" | "7d" | "30d" | "90d" | "1y";
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const [selectedPeriod, setSelectedPeriod] = useState<Period>("7d");
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showUserModal, setShowUserModal] = useState(false);
@@ -77,15 +80,45 @@ export default function AdminDashboard() {
   const [showActivityTimeline, setShowActivityTimeline] = useState(false);
   const [userActivities, setUserActivities] = useState<any[]>([]);
   const [detailedUsers, setDetailedUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fraudAlerts, setFraudAlerts] = useState<any[]>([]);
   const revenueChartRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // Fetch users from database
   useEffect(() => {
-    fetchUsers();
-    subscribeToRealtimeUpdates();
-  }, [searchQuery, statusFilter, kycFilter, rankFilter]);
+    checkAdminAuth();
+  }, []);
+
+  const checkAdminAuth = async () => {
+    const user = await authService.getCurrentUser();
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    // Check if user has admin or master_admin role
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || (profile.role !== "admin" && profile.role !== "master_admin")) {
+      router.push("/dashboard");
+      return;
+    }
+
+    setIsAdmin(true);
+    setCurrentUser(user);
+    setLoading(false);
+    fetchDashboardData();
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchDashboardData();
+    }
+  }, [isAdmin, dateRange, selectedPeriod]);
 
   const fetchUsers = async () => {
     try {
@@ -450,6 +483,17 @@ export default function AdminDashboard() {
       );
     }
   };
+
+  if (loading || !isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-gray-400">Verifying admin access...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1263,7 +1307,7 @@ export default function AdminDashboard() {
                 <div className="space-y-3">
                   {userActivities.length === 0 ? (
                     <Card className="p-8 bg-purple-800/30 border-purple-700 text-center">
-                      <Clock className="h-12 w-12 mx-auto text-purple-400 mb-2" />
+                      <Clock className="h-12 w-12 mx-auto text-purple-400 mb-4" />
                       <p className="text-purple-300">No activity recorded yet</p>
                     </Card>
                   ) : (
