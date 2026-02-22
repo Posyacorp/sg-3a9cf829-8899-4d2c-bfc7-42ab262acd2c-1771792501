@@ -96,11 +96,13 @@ export default function AdminSetup() {
         return;
       }
 
-      // Update role in users table (for consistency)
+      // Update users table (role is only in profiles now, skipping users table update for role)
+      /* 
       await supabase
         .from("users")
         .update({ role })
         .eq("id", profiles.id);
+      */
 
       setMessage({ 
         type: "success", 
@@ -149,11 +151,13 @@ export default function AdminSetup() {
         return;
       }
 
-      // Update users table
+      // Update users table (role is only in profiles now, skipping users table update for role)
+      /*
       await supabase
         .from("users")
         .update({ role })
         .eq("id", user.id);
+      */
 
       setMessage({ 
         type: "success", 
@@ -187,11 +191,13 @@ export default function AdminSetup() {
         return;
       }
 
-      // Update users table
+      // Update users table (role is only in profiles now, skipping users table update for role)
+      /*
       await supabase
         .from("users")
         .update({ role: "user" })
         .eq("id", userId);
+      */
 
       setMessage({ type: "success", text: `Successfully revoked admin access for ${userEmail}` });
       fetchAdmins();

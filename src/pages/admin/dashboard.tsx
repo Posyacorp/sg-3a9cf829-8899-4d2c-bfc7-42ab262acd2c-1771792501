@@ -114,39 +114,24 @@ export default function AdminDashboard() {
     fetchDashboardData();
   };
 
-  useEffect(() => {
-    if (isAdmin) {
-      fetchDashboardData();
-    }
-  }, [isAdmin, dateRange, selectedPeriod]);
-
-  const fetchUsers = async () => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const users = await adminService.getAllUsers({
-        search: searchQuery,
-        status: statusFilter,
-        kycStatus: kycFilter,
-        starRank: rankFilter,
-      });
-      setDetailedUsers(users);
+      await fetchUsers();
+      // Here you would typically fetch other dashboard metrics
+      // For now we're using mock data for charts, but users are real
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const subscribeToRealtimeUpdates = () => {
-    const channel = adminService.subscribeToUserUpdates((payload) => {
-      console.log("Real-time update:", payload);
-      fetchUsers(); // Refresh user list on any change
-    });
-
-    return () => {
-      adminService.unsubscribeFromUserUpdates(channel);
-    };
-  };
+  useEffect(() => {
+    if (isAdmin) {
+      fetchDashboardData();
+    }
+  }, [isAdmin, selectedPeriod]);
 
   const handleViewDetails = async (user: any) => {
     try {
