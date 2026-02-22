@@ -1,5 +1,6 @@
 import { SEO } from "@/components/SEO";
 import { useState, useEffect, useRef } from "react";
+import Papa from "papaparse";
 import { supabase } from "@/integrations/supabase/client";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,12 @@ import {
   BarChart3,
   LineChart,
   FileText,
-  Table as TableIcon
+  Table as TableIcon,
+  EyeOff,
+  Copy,
+  Key,
+  Link as LinkIcon,
+  UserCog,
 } from "lucide-react";
 import {
   LineChart as RechartsLine,
@@ -59,12 +65,37 @@ import {
   exportMultipleToCSV,
   exportChartToPDF,
 } from "@/lib/exportUtils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function AdminDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<"24h" | "7d" | "30d" | "90d" | "1y">("7d");
   const revenueChartRef = useRef<HTMLDivElement>(null);
-  const userGrowthChartRef = useRef<HTMLDivElement>(null);
-  const packageChartRef = useRef<HTMLDivElement>(null);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Bulk operations state
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<"suspend" | "activate" | "delete" | "export" | "">("");
+  
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "suspended">("all");
+  const [filterKYC, setFilterKYC] = useState<"all" | "verified" | "pending" | "not_verified">("all");
+  const [filterRank, setFilterRank] = useState<"all" | "star1" | "star2" | "star3" | "star4" | "star5" | "star6" | "star7">("all");
+  
+  // Activity timeline state
+  const [showActivityTimeline, setShowActivityTimeline] = useState(false);
+  const [userActivities, setUserActivities] = useState<any[]>([]);
 
   // Mock data - Replace with real API calls
   const [stats, setStats] = useState({
@@ -164,6 +195,263 @@ export default function AdminDashboard() {
   ];
 
   const COLORS = ['#8b5cf6', '#a78bfa', '#c084fc', '#e879f9', '#f0abfc', '#fae8ff', '#fdf4ff', '#faf5ff'];
+
+  // Enhanced user data with passwords and referral info
+  const usersData = [
+    {
+      id: "1",
+      email: "user1@example.com",
+      full_name: "John Doe",
+      password: "hashed_password_123",
+      referral_code: "JOHN2024",
+      referral_link: "https://sui24.trade?ref=JOHN2024",
+      phone: "+1 234 567 8900",
+      created_at: "2026-01-15",
+      status: "active",
+      kyc_status: "verified",
+      total_deposits: 5000,
+      total_withdrawals: 2000,
+      current_balance: 3500,
+      active_packages: 2,
+      team_size: 45,
+      team_volume: 125000,
+      total_commissions: 8500,
+      star_rank: "Star 3",
+      direct_referrals: 12,
+      ip_address: "192.168.1.1",
+      last_login: "2026-02-22 08:30:00",
+    },
+    {
+      id: "2",
+      email: "user2@example.com",
+      full_name: "Jane Smith",
+      password: "hashed_password_456",
+      referral_code: "JANE2024",
+      referral_link: "https://sui24.trade?ref=JANE2024",
+      phone: "+1 234 567 8901",
+      created_at: "2026-01-18",
+      status: "active",
+      kyc_status: "pending",
+      total_deposits: 2500,
+      total_withdrawals: 500,
+      current_balance: 2200,
+      active_packages: 1,
+      team_size: 28,
+      team_volume: 75000,
+      total_commissions: 4200,
+      star_rank: "Star 2",
+      direct_referrals: 8,
+      ip_address: "192.168.1.2",
+      last_login: "2026-02-22 09:15:00",
+    },
+    {
+      id: "3",
+      email: "user3@example.com",
+      full_name: "Mike Johnson",
+      password: "hashed_password_789",
+      referral_code: "MIKE2024",
+      referral_link: "https://sui24.trade?ref=MIKE2024",
+      phone: "+1 234 567 8902",
+      created_at: "2026-01-20",
+      status: "suspended",
+      kyc_status: "verified",
+      total_deposits: 10000,
+      total_withdrawals: 8000,
+      current_balance: 2500,
+      active_packages: 3,
+      team_size: 67,
+      team_volume: 250000,
+      total_commissions: 15000,
+      star_rank: "Star 4",
+      direct_referrals: 15,
+      ip_address: "192.168.1.3",
+      last_login: "2026-02-20 14:20:00",
+    },
+  ];
+
+  // User activity timeline data
+  const getUserActivities = (userId: string) => {
+    return [
+      { id: 1, type: "login", description: "Logged in from 192.168.1.1", timestamp: "2026-02-22 09:30:00", icon: "🔐" },
+      { id: 2, type: "deposit", description: "Deposited 100 SUI ($90)", timestamp: "2026-02-22 09:25:00", icon: "💰" },
+      { id: 3, type: "package", description: "Purchased Package 2 (100 SUI)", timestamp: "2026-02-22 09:26:00", icon: "📦" },
+      { id: 4, type: "roi_claim", description: "Claimed ROI: 5.2 SUI", timestamp: "2026-02-22 06:15:00", icon: "🎁" },
+      { id: 5, type: "commission", description: "Earned L1 commission: 3 SUI from user #1234", timestamp: "2026-02-22 05:00:00", icon: "💵" },
+      { id: 6, type: "p2p", description: "Sent 20 SUI to user@example.com", timestamp: "2026-02-21 18:30:00", icon: "🔄" },
+      { id: 7, type: "withdrawal", description: "Withdrew 50 SUI (Pending)", timestamp: "2026-02-21 15:00:00", icon: "📤" },
+      { id: 8, type: "kyc", description: "KYC verification completed", timestamp: "2026-02-20 12:00:00", icon: "✅" },
+      { id: 9, type: "referral", description: "New referral: jane.doe@example.com", timestamp: "2026-02-20 10:30:00", icon: "👥" },
+      { id: 10, type: "signup", description: "Account created", timestamp: "2026-02-15 14:20:00", icon: "🎉" },
+    ];
+  };
+
+  // Filter and search users
+  const filteredUsers = usersData.filter(user => {
+    // Search query filter
+    const matchesSearch = searchQuery === "" || 
+      user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.referral_code.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Status filter
+    const matchesStatus = filterStatus === "all" || user.status === filterStatus;
+    
+    // KYC filter
+    const matchesKYC = filterKYC === "all" || user.kyc_status === filterKYC;
+    
+    // Rank filter
+    const matchesRank = filterRank === "all" || user.star_rank.toLowerCase().replace(" ", "") === filterRank;
+    
+    return matchesSearch && matchesStatus && matchesKYC && matchesRank;
+  });
+
+  // Bulk operations handlers
+  const toggleUserSelection = (userId: string) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedUsers.length === filteredUsers.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(filteredUsers.map(u => u.id));
+    }
+  };
+
+  const executeBulkAction = () => {
+    if (selectedUsers.length === 0) {
+      alert("Please select at least one user");
+      return;
+    }
+
+    switch (bulkAction) {
+      case "suspend":
+        alert(`Suspending ${selectedUsers.length} users...`);
+        setSelectedUsers([]);
+        break;
+      case "activate":
+        alert(`Activating ${selectedUsers.length} users...`);
+        setSelectedUsers([]);
+        break;
+      case "delete":
+        if (confirm(`Are you sure you want to delete ${selectedUsers.length} users? This action cannot be undone.`)) {
+          alert(`Deleting ${selectedUsers.length} users...`);
+          setSelectedUsers([]);
+        }
+        break;
+      case "export":
+        exportSelectedUsersToCSV();
+        break;
+    }
+    setBulkAction("");
+  };
+
+  const exportSelectedUsersToCSV = () => {
+    const selectedUserData = usersData.filter(u => selectedUsers.includes(u.id));
+    const csvData = selectedUserData.map(user => ({
+      "User ID": user.id,
+      "Full Name": user.full_name,
+      "Email": user.email,
+      "Phone": user.phone,
+      "Referral Code": user.referral_code,
+      "Status": user.status,
+      "KYC Status": user.kyc_status,
+      "Balance": user.current_balance,
+      "Total Deposits": user.total_deposits,
+      "Total Withdrawals": user.total_withdrawals,
+      "Star Rank": user.star_rank,
+      "Team Size": user.team_size,
+      "Team Volume": user.team_volume,
+      "Direct Referrals": user.direct_referrals,
+      "Total Commissions": user.total_commissions,
+      "Registered": user.created_at,
+      "Last Login": user.last_login,
+    }));
+
+    const csv = Papa.unparse(csvData);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `sui24_selected_users_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setSelectedUsers([]);
+  };
+
+  const exportAllUsersToCSV = () => {
+    const csvData = filteredUsers.map(user => ({
+      "User ID": user.id,
+      "Full Name": user.full_name,
+      "Email": user.email,
+      "Phone": user.phone,
+      "Referral Code": user.referral_code,
+      "Status": user.status,
+      "KYC Status": user.kyc_status,
+      "Balance": user.current_balance,
+      "Total Deposits": user.total_deposits,
+      "Total Withdrawals": user.total_withdrawals,
+      "Star Rank": user.star_rank,
+      "Team Size": user.team_size,
+      "Team Volume": user.team_volume,
+      "Direct Referrals": user.direct_referrals,
+      "Total Commissions": user.total_commissions,
+      "Registered": user.created_at,
+      "Last Login": user.last_login,
+    }));
+
+    const csv = Papa.unparse(csvData);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `sui24_all_users_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const sendPasswordResetEmail = (user: any) => {
+    alert(`Password reset email sent to ${user.email}!\n\nReset Link: https://sui24.trade/reset-password?token=${user.id}_reset_token\n\nThe user will receive an email with instructions to reset their password.`);
+  };
+
+  const openActivityTimeline = (user: any) => {
+    setSelectedUser(user);
+    setUserActivities(getUserActivities(user.id));
+    setShowActivityTimeline(true);
+  };
+
+  const handleViewUser = (user: any) => {
+    setSelectedUser(user);
+    setShowUserModal(true);
+    setShowPassword(false);
+    setNewPassword("");
+  };
+
+  const handleCopyText = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert("Copied to clipboard!");
+  };
+
+  const handlePasswordReset = () => {
+    if (newPassword.length < 6) {
+      alert("Password must be at least 6 characters");
+      return;
+    }
+    alert(`Password reset for ${selectedUser?.email}`);
+    setNewPassword("");
+    setShowUserModal(false);
+  };
+
+  const handleResetPassword = () => {
+    // Deprecated in favor of handlePasswordReset, keeping for compatibility if referenced
+    handlePasswordReset();
+  };
 
   // Export Handlers
   const handleExportFullPDF = async () => {
@@ -653,6 +941,530 @@ export default function AdminDashboard() {
               </AreaChart>
             </ResponsiveContainer>
           </Card>
+
+          {/* User Management Section */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold">User Management</h3>
+              <Button onClick={exportAllUsersToCSV} variant="outline" size="sm">
+                <Download className="w-4 h-4 mr-2" />
+                Export All Users (CSV)
+              </Button>
+            </div>
+
+            {/* Search and Filter Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+              {/* Search */}
+              <div className="md:col-span-2">
+                <Input
+                  placeholder="Search by name, email, or referral code..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as any)}
+                className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+              </select>
+
+              {/* KYC Filter */}
+              <select
+                value={filterKYC}
+                onChange={(e) => setFilterKYC(e.target.value as any)}
+                className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm"
+              >
+                <option value="all">All KYC</option>
+                <option value="verified">Verified</option>
+                <option value="pending">Pending</option>
+                <option value="not_verified">Not Verified</option>
+              </select>
+
+              {/* Rank Filter */}
+              <select
+                value={filterRank}
+                onChange={(e) => setFilterRank(e.target.value as any)}
+                className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm"
+              >
+                <option value="all">All Ranks</option>
+                <option value="star1">Star 1</option>
+                <option value="star2">Star 2</option>
+                <option value="star3">Star 3</option>
+                <option value="star4">Star 4</option>
+                <option value="star5">Star 5</option>
+                <option value="star6">Star 6</option>
+                <option value="star7">Star 7</option>
+              </select>
+            </div>
+
+            {/* Bulk Actions Bar */}
+            {selectedUsers.length > 0 && (
+              <div className="flex items-center gap-4 mb-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                <span className="text-sm font-medium">
+                  {selectedUsers.length} user{selectedUsers.length > 1 ? "s" : ""} selected
+                </span>
+                <select
+                  value={bulkAction}
+                  onChange={(e) => setBulkAction(e.target.value as any)}
+                  className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-sm"
+                >
+                  <option value="">Choose Action...</option>
+                  <option value="activate">Activate</option>
+                  <option value="suspend">Suspend</option>
+                  <option value="export">Export Selected</option>
+                  <option value="delete">Delete</option>
+                </select>
+                {bulkAction && (
+                  <Button onClick={executeBulkAction} size="sm" variant="default">
+                    Execute
+                  </Button>
+                )}
+                <Button onClick={() => setSelectedUsers([])} size="sm" variant="outline">
+                  Clear Selection
+                </Button>
+              </div>
+            )}
+
+            {/* Users Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left p-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4"
+                      />
+                    </th>
+                    <th className="text-left p-3">User Info</th>
+                    <th className="text-left p-3">Status</th>
+                    <th className="text-left p-3">Balance</th>
+                    <th className="text-left p-3">Team</th>
+                    <th className="text-left p-3">Rank</th>
+                    <th className="text-left p-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((user) => (
+                    <tr key={user.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.includes(user.id)}
+                          onChange={() => toggleUserSelection(user.id)}
+                          className="w-4 h-4"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <div>
+                          <div className="font-medium">{user.full_name}</div>
+                          <div className="text-sm text-gray-400">{user.email}</div>
+                          <div className="text-xs text-gray-500">Ref: {user.referral_code}</div>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="space-y-1">
+                          <Badge variant={user.status === "active" ? "default" : "destructive"}>
+                            {user.status}
+                          </Badge>
+                          <span
+                            className={`px-2 py-1 rounded text-xs ${
+                              user.kyc_status === "verified"
+                                ? "bg-blue-500/20 text-blue-400"
+                                : user.kyc_status === "pending"
+                                ? "bg-yellow-500/20 text-yellow-400"
+                                : "bg-gray-500/20 text-gray-400"
+                            }`}
+                          >
+                            {user.kyc_status}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-3 text-sm">${user.current_balance.toLocaleString()}</td>
+                      <td className="p-3 text-sm">
+                        <div>{user.team_size} users</div>
+                        <div className="text-gray-400">${(user.team_volume / 1000).toFixed(0)}K</div>
+                      </td>
+                      <td className="p-3">
+                        <Badge variant="outline">{user.star_rank}</Badge>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowUserModal(true);
+                            }}
+                          >
+                            👤
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openActivityTimeline(user)}
+                          >
+                            📊
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={user.status === "active" ? "destructive" : "default"}
+                            onClick={() => alert(`User ${user.status === "active" ? "suspended" : "activated"}`)}
+                          >
+                            {user.status === "active" ? "Suspend" : "Activate"}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Results Count */}
+            <div className="mt-4 text-sm text-gray-400">
+              Showing {filteredUsers.length} of {usersData.length} users
+            </div>
+          </Card>
+
+          {/* User Details Modal */}
+          <Dialog open={showUserModal} onOpenChange={setShowUserModal}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-900 border-purple-500/20">
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold text-purple-400">
+                  User Details - {selectedUser?.full_name}
+                </DialogTitle>
+                <DialogDescription className="text-gray-400">
+                  Manage user account, password, and referral information
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedUser && (
+                <div className="space-y-6 mt-4">
+                  {/* Account Information */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card className="p-4 bg-gray-800 border-gray-700">
+                      <h4 className="font-semibold mb-3 text-purple-400">Account Information</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">User ID:</span>
+                          <span>{selectedUser.id}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Email:</span>
+                          <span>{selectedUser.email}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Phone:</span>
+                          <span>{selectedUser.phone}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Created:</span>
+                          <span>{selectedUser.created_at}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Last Login:</span>
+                          <span className="text-xs">{selectedUser.last_login}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">IP Address:</span>
+                          <span>{selectedUser.ip_address}</span>
+                        </div>
+                      </div>
+                    </Card>
+
+                    <Card className="p-4 bg-gray-800 border-gray-700">
+                      <h4 className="font-semibold mb-3 text-purple-400">Financial Summary</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Total Deposits:</span>
+                          <span className="text-green-400">${selectedUser.total_deposits.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Total Withdrawals:</span>
+                          <span className="text-red-400">${selectedUser.total_withdrawals.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Current Balance:</span>
+                          <span className="text-blue-400 font-bold">${selectedUser.current_balance.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Active Packages:</span>
+                          <span>{selectedUser.active_packages}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Total Commissions:</span>
+                          <span className="text-purple-400">${selectedUser.total_commissions.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+
+                  {/* Password Management */}
+                  <Card className="p-4">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <span>🔐</span> Password Management
+                    </h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm text-gray-400">Current Password Hash</label>
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            value={selectedUser.password_hash}
+                            readOnly
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? "🙈" : "👁"}
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm text-gray-400">Reset Password</label>
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            type="password"
+                            placeholder="Enter new password..."
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="flex-1"
+                          />
+                          <Button size="sm" onClick={handlePasswordReset}>
+                            Reset
+                          </Button>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => sendPasswordResetEmail(selectedUser)}
+                      >
+                        📧 Send Password Reset Email
+                      </Button>
+                    </div>
+                  </Card>
+
+                  {/* Referral Information */}
+                  <Card className="p-4 bg-gray-800 border-gray-700">
+                    <h4 className="font-semibold mb-3 text-purple-400 flex items-center gap-2">
+                      <LinkIcon className="w-4 h-4" />
+                      Referral Information
+                    </h4>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-gray-400">Referral Code</Label>
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            value={selectedUser.referral_code}
+                            readOnly
+                            className="bg-gray-900 border-gray-700 font-mono"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleCopyText(selectedUser.referral_code)}
+                            className="border-purple-500/50"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-gray-400">Referral Link</Label>
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            value={selectedUser.referral_link}
+                            readOnly
+                            className="bg-gray-900 border-gray-700 text-sm"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleCopyText(selectedUser.referral_link)}
+                            className="border-purple-500/50"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4 mt-4">
+                        <div className="text-center p-3 bg-gray-900 rounded-lg">
+                          <div className="text-2xl font-bold text-purple-400">{selectedUser.direct_referrals}</div>
+                          <div className="text-xs text-gray-400">Direct Referrals</div>
+                        </div>
+                        <div className="text-center p-3 bg-gray-900 rounded-lg">
+                          <div className="text-2xl font-bold text-blue-400">{selectedUser.team_size}</div>
+                          <div className="text-xs text-gray-400">Total Team Size</div>
+                        </div>
+                        <div className="text-center p-3 bg-gray-900 rounded-lg">
+                          <div className="text-2xl font-bold text-green-400">
+                            ${(selectedUser.team_volume / 1000).toFixed(0)}K
+                          </div>
+                          <div className="text-xs text-gray-400">Team Volume</div>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* MLM Performance */}
+                  <Card className="p-4 bg-gray-800 border-gray-700">
+                    <h4 className="font-semibold mb-3 text-purple-400">MLM Performance</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-gray-400 text-sm">Star Rank:</span>
+                        <div className="text-xl font-bold text-purple-400 mt-1">{selectedUser.star_rank}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 text-sm">Total Commissions Earned:</span>
+                        <div className="text-xl font-bold text-green-400 mt-1">
+                          ${selectedUser.total_commissions.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              {/* Activity Timeline Dialog */}
+              <Dialog open={showActivityTimeline} onOpenChange={setShowActivityTimeline}>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <span>📊</span>
+                      Activity Timeline - {selectedUser?.full_name}
+                    </DialogTitle>
+                  </DialogHeader>
+                  
+                  {selectedUser && (
+                    <div className="space-y-4">
+                      {/* User Summary */}
+                      <Card className="p-4 bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-purple-500/20">
+                        <div className="grid grid-cols-4 gap-4 text-center">
+                          <div>
+                            <div className="text-2xl font-bold text-purple-400">{userActivities.length}</div>
+                            <div className="text-xs text-gray-400">Total Activities</div>
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-green-400">{selectedUser.total_deposits}</div>
+                            <div className="text-xs text-gray-400">Total Deposits</div>
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-blue-400">{selectedUser.total_commissions}</div>
+                            <div className="text-xs text-gray-400">Commissions</div>
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-pink-400">{selectedUser.direct_referrals}</div>
+                            <div className="text-xs text-gray-400">Referrals</div>
+                          </div>
+                        </div>
+                      </Card>
+
+                      {/* Timeline */}
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-sm text-gray-400">Recent Activity</h4>
+                        {userActivities.map((activity, index) => (
+                          <div key={activity.id} className="flex gap-4 items-start">
+                            {/* Icon */}
+                            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg">
+                              {activity.icon}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <div className="font-medium capitalize">{activity.type.replace("_", " ")}</div>
+                                <div className="text-xs text-gray-500">{activity.timestamp}</div>
+                              </div>
+                              <div className="text-sm text-gray-400 mt-1">{activity.description}</div>
+                            </div>
+
+                            {/* Connector Line */}
+                            {index < userActivities.length - 1 && (
+                              <div className="absolute left-[1.25rem] mt-12 w-0.5 h-8 bg-gradient-to-b from-purple-500/50 to-transparent" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Activity Stats */}
+                      <Card className="p-4">
+                        <h4 className="font-semibold mb-3 text-sm">Activity Breakdown</h4>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                            <span className="text-gray-400">Logins</span>
+                            <span className="font-medium">1</span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                            <span className="text-gray-400">Deposits</span>
+                            <span className="font-medium">1</span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                            <span className="text-gray-400">ROI Claims</span>
+                            <span className="font-medium">1</span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                            <span className="text-gray-400">Commissions</span>
+                            <span className="font-medium">1</span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                            <span className="text-gray-400">P2P Transfers</span>
+                            <span className="font-medium">1</span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                            <span className="text-gray-400">Withdrawals</span>
+                            <span className="font-medium">1</span>
+                          </div>
+                        </div>
+                      </Card>
+
+                      {/* Export Timeline */}
+                      <Button
+                        onClick={() => {
+                          const csvData = userActivities.map(a => ({
+                            "Type": a.type,
+                            "Description": a.description,
+                            "Timestamp": a.timestamp,
+                          }));
+                          const csv = Papa.unparse(csvData);
+                          const blob = new Blob([csv], { type: "text/csv" });
+                          const url = window.URL.createObjectURL(blob);
+                          const link = document.createElement("a");
+                          link.href = url;
+                          link.download = `${selectedUser.full_name}_activity_${new Date().toISOString().split("T")[0]}.csv`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Activity Timeline (CSV)
+                      </Button>
+                    </div>
+                  )}
+                </DialogContent>
+              </Dialog>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </>
