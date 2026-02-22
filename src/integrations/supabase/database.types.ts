@@ -15,6 +15,102 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_impersonation: {
+        Row: {
+          admin_id: string
+          created_at: string | null
+          expires_at: string
+          id: string
+          token: string
+          user_id: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          token: string
+          user_id: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          token?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_impersonation_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_impersonation_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fraud_alerts: {
+        Row: {
+          alert_type: string
+          created_at: string | null
+          description: string
+          id: string
+          is_resolved: boolean | null
+          resolved_at: string | null
+          resolved_by: string | null
+          risk_score: number | null
+          severity: string
+          user_id: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string | null
+          description: string
+          id?: string
+          is_resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          risk_score?: number | null
+          severity: string
+          user_id: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          is_resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          risk_score?: number | null
+          severity?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fraud_alerts_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fraud_alerts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mlm_commissions: {
         Row: {
           base_amount: number
@@ -306,10 +402,14 @@ export type Database = {
           avatar_url: string | null
           created_at: string | null
           email: string | null
+          fraud_score: number | null
           full_name: string | null
           id: string
           ip_address: string | null
+          is_flagged_for_review: boolean | null
           kyc_verified: boolean | null
+          last_ip_address: string | null
+          password_hash: string | null
           referral_code: string | null
           referred_by: string | null
           role: string | null
@@ -319,16 +419,22 @@ export type Database = {
           total_deposited: number | null
           total_earned: number | null
           total_withdrawn: number | null
+          two_factor_enabled: boolean | null
+          two_factor_secret: string | null
           updated_at: string | null
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string | null
           email?: string | null
+          fraud_score?: number | null
           full_name?: string | null
           id: string
           ip_address?: string | null
+          is_flagged_for_review?: boolean | null
           kyc_verified?: boolean | null
+          last_ip_address?: string | null
+          password_hash?: string | null
           referral_code?: string | null
           referred_by?: string | null
           role?: string | null
@@ -338,16 +444,22 @@ export type Database = {
           total_deposited?: number | null
           total_earned?: number | null
           total_withdrawn?: number | null
+          two_factor_enabled?: boolean | null
+          two_factor_secret?: string | null
           updated_at?: string | null
         }
         Update: {
           avatar_url?: string | null
           created_at?: string | null
           email?: string | null
+          fraud_score?: number | null
           full_name?: string | null
           id?: string
           ip_address?: string | null
+          is_flagged_for_review?: boolean | null
           kyc_verified?: boolean | null
+          last_ip_address?: string | null
+          password_hash?: string | null
           referral_code?: string | null
           referred_by?: string | null
           role?: string | null
@@ -357,6 +469,8 @@ export type Database = {
           total_deposited?: number | null
           total_earned?: number | null
           total_withdrawn?: number | null
+          two_factor_enabled?: boolean | null
+          two_factor_secret?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -593,6 +707,44 @@ export type Database = {
           },
         ]
       }
+      user_activity: {
+        Row: {
+          activity_type: string
+          created_at: string | null
+          description: string
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          activity_type: string
+          created_at?: string | null
+          description: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          activity_type?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_activity_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_packages: {
         Row: {
           completed_at: string | null
@@ -780,6 +932,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_fraud_alert: {
+        Args: {
+          p_alert_type: string
+          p_description: string
+          p_risk_score?: number
+          p_severity: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       credit_wallet: {
         Args: { p_amount: number; p_user_id: string; p_wallet_type: string }
         Returns: undefined
@@ -797,6 +959,16 @@ export type Database = {
       lock_funds: {
         Args: { p_amount: number; p_user_id: string; p_wallet_type: string }
         Returns: undefined
+      }
+      log_user_activity: {
+        Args: {
+          p_activity_type: string
+          p_description: string
+          p_ip_address?: string
+          p_metadata?: Json
+          p_user_id: string
+        }
+        Returns: string
       }
       p2p_transfer: {
         Args: {

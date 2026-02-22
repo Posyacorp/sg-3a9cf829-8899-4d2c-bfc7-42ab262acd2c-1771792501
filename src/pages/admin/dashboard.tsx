@@ -1,314 +1,350 @@
 import { SEO } from "@/components/SEO";
 import { useState, useEffect, useRef } from "react";
-import Papa from "papaparse";
-import { supabase } from "@/integrations/supabase/client";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  LayoutDashboard,
+  Calendar,
   Users,
-  Package,
-  Wallet,
-  TrendingUp,
   DollarSign,
+  TrendingUp,
+  Package,
   Activity,
-  Settings,
+  Download,
+  FileText,
+  Table,
+  Eye,
+  EyeOff,
+  Copy,
+  Mail,
   Search,
   Filter,
+  CheckSquare,
+  X,
+  BarChart3,
+  Shield,
+  UserCog,
+  AlertTriangle,
   CheckCircle,
   XCircle,
   Clock,
-  Eye,
-  Edit,
-  Ban,
-  Shield,
-  ArrowUpRight,
-  ArrowDownRight,
-  AlertCircle,
-  Download,
-  Calendar,
-  PieChart,
-  BarChart3,
-  LineChart,
-  FileText,
-  Table as TableIcon,
-  EyeOff,
-  Copy,
-  Key,
-  Link as LinkIcon,
-  UserCog,
 } from "lucide-react";
 import {
-  LineChart as RechartsLine,
-  BarChart as RechartsBar,
-  PieChart as RechartsPie,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
   Pie,
   Cell,
-  Line,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Area,
-  AreaChart
 } from "recharts";
+import { supabase } from "@/integrations/supabase/client";
+import Link from "next/link";
+import Papa from "papaparse";
+import { adminService } from "@/services/adminService";
 import {
-  exportDashboardToPDF,
+  exportToPDF,
   exportToCSV,
   exportMultipleToCSV,
   exportChartToPDF,
 } from "@/lib/exportUtils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+
+type Period = "24h" | "7d" | "30d" | "90d" | "1y";
 
 export default function AdminDashboard() {
-  const [selectedPeriod, setSelectedPeriod] = useState<"24h" | "7d" | "30d" | "90d" | "1y">("7d");
-  const revenueChartRef = useRef<HTMLDivElement>(null);
-  const [showUserModal, setShowUserModal] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<Period>("7d");
   const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [newPassword, setNewPassword] = useState("");
+  const [showUserModal, setShowUserModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Bulk operations state
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [bulkAction, setBulkAction] = useState<"suspend" | "activate" | "delete" | "export" | "">("");
-  
-  // Search and filter state
+  const [newPassword, setNewPassword] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "suspended">("all");
-  const [filterKYC, setFilterKYC] = useState<"all" | "verified" | "pending" | "not_verified">("all");
-  const [filterRank, setFilterRank] = useState<"all" | "star1" | "star2" | "star3" | "star4" | "star5" | "star6" | "star7">("all");
-  
-  // Activity timeline state
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [kycFilter, setKycFilter] = useState("all");
+  const [rankFilter, setRankFilter] = useState("all");
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState("");
   const [showActivityTimeline, setShowActivityTimeline] = useState(false);
   const [userActivities, setUserActivities] = useState<any[]>([]);
+  const [detailedUsers, setDetailedUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fraudAlerts, setFraudAlerts] = useState<any[]>([]);
+  const revenueChartRef = useRef(null);
 
-  // Mock data - Replace with real API calls
-  const [stats, setStats] = useState({
-    totalUsers: 12847,
-    activeUsers: 8432,
-    totalVolume: 4523000,
-    totalEarnings: 226150,
-    pendingDeposits: 23,
-    pendingWithdrawals: 15,
-    activePackages: 3421,
-    totalCommissions: 156780
-  });
+  // Fetch users from database
+  useEffect(() => {
+    fetchUsers();
+    subscribeToRealtimeUpdates();
+  }, [searchQuery, statusFilter, kycFilter, rankFilter]);
 
-  // Revenue Analytics Data (7 days)
-  const revenueData = [
-    { date: "Mon", deposits: 45000, withdrawals: 12000, netRevenue: 33000, adminFees: 2250 },
-    { date: "Tue", deposits: 52000, withdrawals: 18000, netRevenue: 34000, adminFees: 2600 },
-    { date: "Wed", deposits: 48000, withdrawals: 15000, netRevenue: 33000, adminFees: 2400 },
-    { date: "Thu", deposits: 61000, withdrawals: 22000, netRevenue: 39000, adminFees: 3050 },
-    { date: "Fri", deposits: 73000, withdrawals: 28000, netRevenue: 45000, adminFees: 3650 },
-    { date: "Sat", deposits: 68000, withdrawals: 25000, netRevenue: 43000, adminFees: 3400 },
-    { date: "Sun", deposits: 58000, withdrawals: 20000, netRevenue: 38000, adminFees: 2900 }
-  ];
-
-  // User Growth Data
-  const userGrowthData = [
-    { month: "Jan", users: 1250, active: 890 },
-    { month: "Feb", users: 2100, active: 1520 },
-    { month: "Mar", users: 3450, active: 2340 },
-    { month: "Apr", users: 5200, active: 3680 },
-    { month: "May", users: 7300, active: 5210 },
-    { month: "Jun", users: 9800, active: 6890 },
-    { month: "Jul", users: 12847, active: 8432 }
-  ];
-
-  // Package Distribution
-  const packageDistribution = [
-    { name: "Starter (30)", value: 3456, percentage: 27, color: "#8b5cf6" },
-    { name: "Bronze (100)", value: 2890, percentage: 22, color: "#a78bfa" },
-    { name: "Silver (250)", value: 2145, percentage: 17, color: "#c084fc" },
-    { name: "Gold (750)", value: 1678, percentage: 13, color: "#e879f9" },
-    { name: "Platinum (2.5K)", value: 1234, percentage: 10, color: "#f0abfc" },
-    { name: "Diamond (5K)", value: 892, percentage: 7, color: "#fae8ff" },
-    { name: "Premium (7.5K)", value: 456, percentage: 3, color: "#fdf4ff" },
-    { name: "Royal (10K)", value: 123, percentage: 1, color: "#faf5ff" }
-  ];
-
-  // Transaction Volume by Type
-  const transactionVolume = [
-    { type: "Deposits", count: 3456, volume: 405000, avgSize: 117 },
-    { type: "Withdrawals", count: 1890, volume: 180000, avgSize: 95 },
-    { type: "P2P Transfers", count: 2345, volume: 89000, avgSize: 38 },
-    { type: "ROI Claims", count: 8923, volume: 267000, avgSize: 30 },
-    { type: "Commissions", count: 5678, volume: 156780, avgSize: 28 }
-  ];
-
-  // MLM Level Performance
-  const mlmLevelData = [
-    { level: "L1", users: 2456, volume: 456000, commission: 13680, rate: "3%" },
-    { level: "L2", users: 4893, volume: 823000, commission: 16460, rate: "2%" },
-    { level: "L3", users: 8234, volume: 1234000, commission: 12340, rate: "1%" },
-    { level: "L4-6", users: 15678, volume: 1890000, commission: 28350, rate: "0.5%" },
-    { level: "L7-18", users: 34567, volume: 2345000, commission: 87938, rate: "0.25%" },
-    { level: "L19-24", users: 12890, volume: 890000, commission: 15420, rate: "0.5%-3%" }
-  ];
-
-  // Platform Earnings Breakdown
-  const platformEarnings = [
-    { source: "Package Entry (5%)", amount: 22615, percentage: 45, color: "#8b5cf6" },
-    { source: "Withdrawal Tax (50%)", amount: 15000, percentage: 30, color: "#a78bfa" },
-    { source: "P2P Fees (1%)", amount: 890, percentage: 2, color: "#c084fc" },
-    { source: "Trading Losses", amount: 11645, percentage: 23, color: "#e879f9" }
-  ];
-
-  // ROI Claims Activity (Hourly for today)
-  const roiClaimsData = [
-    { hour: "00:00", claims: 45, missed: 12, amount: 1350 },
-    { hour: "03:00", claims: 67, missed: 18, amount: 2010 },
-    { hour: "06:00", claims: 89, missed: 23, amount: 2670 },
-    { hour: "09:00", claims: 134, missed: 34, amount: 4020 },
-    { hour: "12:00", claims: 156, missed: 41, amount: 4680 },
-    { hour: "15:00", claims: 178, missed: 45, amount: 5340 },
-    { hour: "18:00", claims: 145, missed: 38, amount: 4350 },
-    { hour: "21:00", claims: 123, missed: 32, amount: 3690 }
-  ];
-
-  // Active Users Timeline (24 hours)
-  const activeUsersData = [
-    { time: "00:00", online: 234, trading: 89, claiming: 45 },
-    { time: "03:00", online: 189, trading: 67, claiming: 34 },
-    { time: "06:00", online: 267, trading: 98, claiming: 56 },
-    { time: "09:00", online: 456, trading: 178, claiming: 89 },
-    { time: "12:00", online: 589, trading: 234, claiming: 123 },
-    { time: "15:00", online: 678, trading: 289, claiming: 145 },
-    { time: "18:00", online: 734, trading: 312, claiming: 167 },
-    { time: "21:00", online: 612, trading: 245, claiming: 134 }
-  ];
-
-  const COLORS = ['#8b5cf6', '#a78bfa', '#c084fc', '#e879f9', '#f0abfc', '#fae8ff', '#fdf4ff', '#faf5ff'];
-
-  // Enhanced user data with passwords and referral info
-  const usersData = [
-    {
-      id: "1",
-      email: "user1@example.com",
-      full_name: "John Doe",
-      password: "hashed_password_123",
-      referral_code: "JOHN2024",
-      referral_link: "https://sui24.trade?ref=JOHN2024",
-      phone: "+1 234 567 8900",
-      created_at: "2026-01-15",
-      status: "active",
-      kyc_status: "verified",
-      total_deposits: 5000,
-      total_withdrawals: 2000,
-      current_balance: 3500,
-      active_packages: 2,
-      team_size: 45,
-      team_volume: 125000,
-      total_commissions: 8500,
-      star_rank: "Star 3",
-      direct_referrals: 12,
-      ip_address: "192.168.1.1",
-      last_login: "2026-02-22 08:30:00",
-    },
-    {
-      id: "2",
-      email: "user2@example.com",
-      full_name: "Jane Smith",
-      password: "hashed_password_456",
-      referral_code: "JANE2024",
-      referral_link: "https://sui24.trade?ref=JANE2024",
-      phone: "+1 234 567 8901",
-      created_at: "2026-01-18",
-      status: "active",
-      kyc_status: "pending",
-      total_deposits: 2500,
-      total_withdrawals: 500,
-      current_balance: 2200,
-      active_packages: 1,
-      team_size: 28,
-      team_volume: 75000,
-      total_commissions: 4200,
-      star_rank: "Star 2",
-      direct_referrals: 8,
-      ip_address: "192.168.1.2",
-      last_login: "2026-02-22 09:15:00",
-    },
-    {
-      id: "3",
-      email: "user3@example.com",
-      full_name: "Mike Johnson",
-      password: "hashed_password_789",
-      referral_code: "MIKE2024",
-      referral_link: "https://sui24.trade?ref=MIKE2024",
-      phone: "+1 234 567 8902",
-      created_at: "2026-01-20",
-      status: "suspended",
-      kyc_status: "verified",
-      total_deposits: 10000,
-      total_withdrawals: 8000,
-      current_balance: 2500,
-      active_packages: 3,
-      team_size: 67,
-      team_volume: 250000,
-      total_commissions: 15000,
-      star_rank: "Star 4",
-      direct_referrals: 15,
-      ip_address: "192.168.1.3",
-      last_login: "2026-02-20 14:20:00",
-    },
-  ];
-
-  // User activity timeline data
-  const getUserActivities = (userId: string) => {
-    return [
-      { id: 1, type: "login", description: "Logged in from 192.168.1.1", timestamp: "2026-02-22 09:30:00", icon: "🔐" },
-      { id: 2, type: "deposit", description: "Deposited 100 SUI ($90)", timestamp: "2026-02-22 09:25:00", icon: "💰" },
-      { id: 3, type: "package", description: "Purchased Package 2 (100 SUI)", timestamp: "2026-02-22 09:26:00", icon: "📦" },
-      { id: 4, type: "roi_claim", description: "Claimed ROI: 5.2 SUI", timestamp: "2026-02-22 06:15:00", icon: "🎁" },
-      { id: 5, type: "commission", description: "Earned L1 commission: 3 SUI from user #1234", timestamp: "2026-02-22 05:00:00", icon: "💵" },
-      { id: 6, type: "p2p", description: "Sent 20 SUI to user@example.com", timestamp: "2026-02-21 18:30:00", icon: "🔄" },
-      { id: 7, type: "withdrawal", description: "Withdrew 50 SUI (Pending)", timestamp: "2026-02-21 15:00:00", icon: "📤" },
-      { id: 8, type: "kyc", description: "KYC verification completed", timestamp: "2026-02-20 12:00:00", icon: "✅" },
-      { id: 9, type: "referral", description: "New referral: jane.doe@example.com", timestamp: "2026-02-20 10:30:00", icon: "👥" },
-      { id: 10, type: "signup", description: "Account created", timestamp: "2026-02-15 14:20:00", icon: "🎉" },
-    ];
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const users = await adminService.getAllUsers({
+        search: searchQuery,
+        status: statusFilter,
+        kycStatus: kycFilter,
+        starRank: rankFilter,
+      });
+      setDetailedUsers(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Filter and search users
-  const filteredUsers = usersData.filter(user => {
-    // Search query filter
-    const matchesSearch = searchQuery === "" || 
-      user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.referral_code.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // Status filter
-    const matchesStatus = filterStatus === "all" || user.status === filterStatus;
-    
-    // KYC filter
-    const matchesKYC = filterKYC === "all" || user.kyc_status === filterKYC;
-    
-    // Rank filter
-    const matchesRank = filterRank === "all" || user.star_rank.toLowerCase().replace(" ", "") === filterRank;
-    
-    return matchesSearch && matchesStatus && matchesKYC && matchesRank;
-  });
+  const subscribeToRealtimeUpdates = () => {
+    const channel = adminService.subscribeToUserUpdates((payload) => {
+      console.log("Real-time update:", payload);
+      fetchUsers(); // Refresh user list on any change
+    });
 
-  // Bulk operations handlers
+    return () => {
+      adminService.unsubscribeFromUserUpdates(channel);
+    };
+  };
+
+  const handleViewDetails = async (user: any) => {
+    try {
+      const userDetails = await adminService.getUserDetails(user.id);
+      setSelectedUser(userDetails);
+      setShowUserModal(true);
+    } catch (error) {
+      console.error("Error fetching user details:", error);
+      alert("Failed to load user details");
+    }
+  };
+
+  const handleStatusToggle = async (userId: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === "active" ? "suspended" : "active";
+      await adminService.updateUserStatus(userId, newStatus);
+      alert(`User ${newStatus === "active" ? "activated" : "suspended"} successfully`);
+      fetchUsers();
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update user status");
+    }
+  };
+
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedUsers.length === 0) {
+      alert("Please select users and an action");
+      return;
+    }
+
+    try {
+      if (bulkAction === "activate" || bulkAction === "suspend") {
+        await adminService.bulkUpdateStatus(selectedUsers, bulkAction === "activate" ? "active" : "suspended");
+        alert(`${selectedUsers.length} users ${bulkAction}d successfully`);
+      } else if (bulkAction === "delete") {
+        if (confirm(`Are you sure you want to delete ${selectedUsers.length} users? This cannot be undone.`)) {
+          await adminService.bulkDeleteUsers(selectedUsers);
+          alert(`${selectedUsers.length} users deleted successfully`);
+        }
+      } else if (bulkAction === "export") {
+        handleExportSelected();
+      }
+      
+      setSelectedUsers([]);
+      setBulkAction("");
+      fetchUsers();
+    } catch (error) {
+      console.error("Error executing bulk action:", error);
+      alert("Failed to execute bulk action");
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!selectedUser || !newPassword) return;
+    
+    if (newPassword.length < 6) {
+      alert("Password must be at least 6 characters");
+      return;
+    }
+
+    try {
+      await adminService.resetUserPassword(selectedUser.id, newPassword);
+      alert("Password reset successfully!");
+      setNewPassword("");
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      alert("Failed to reset password");
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!selectedUser) return;
+
+    try {
+      const result = await adminService.sendPasswordResetEmail(selectedUser.email, selectedUser.id);
+      alert(`Password reset email sent to ${result.email}\n\nReset link: ${result.resetLink}`);
+    } catch (error) {
+      console.error("Error sending reset email:", error);
+      alert("Failed to send reset email");
+    }
+  };
+
+  const handleViewActivity = async (user: any) => {
+    try {
+      const activities = await adminService.getUserActivity(user.id);
+      setUserActivities(activities);
+      setSelectedUser(user);
+      setShowActivityTimeline(true);
+    } catch (error) {
+      console.error("Error fetching activities:", error);
+      alert("Failed to load activity timeline");
+    }
+  };
+
+  const handleToggle2FA = async (userId: string, currentStatus: boolean) => {
+    try {
+      await adminService.toggle2FA(userId, !currentStatus);
+      alert(`2FA ${!currentStatus ? "enabled" : "disabled"} successfully`);
+      fetchUsers();
+      if (selectedUser?.id === userId) {
+        const updated = await adminService.getUserDetails(userId);
+        setSelectedUser(updated);
+      }
+    } catch (error) {
+      console.error("Error toggling 2FA:", error);
+      alert("Failed to toggle 2FA");
+    }
+  };
+
+  const handleImpersonateUser = async (userId: string) => {
+    if (!confirm("Are you sure you want to impersonate this user? This action will be logged.")) {
+      return;
+    }
+
+    try {
+      // Get current admin user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert("You must be logged in as admin");
+        return;
+      }
+
+      const impersonation = await adminService.createImpersonationToken(user.id, userId);
+      
+      // Store impersonation token in session storage
+      sessionStorage.setItem("impersonation_token", impersonation.token);
+      sessionStorage.setItem("impersonated_user_id", userId);
+      
+      alert("Impersonation started! You are now viewing as this user. Refresh the page to see their dashboard.");
+      
+      // Redirect to user dashboard
+      window.location.href = "/dashboard";
+    } catch (error) {
+      console.error("Error impersonating user:", error);
+      alert("Failed to start impersonation");
+    }
+  };
+
+  const handleRunFraudDetection = async (userId: string) => {
+    try {
+      const fraudReport = await adminService.detectFraud(userId);
+      
+      let alertMessage = `Fraud Detection Results for User:\n\n`;
+      alertMessage += `Risk Score: ${fraudReport.riskScore}/100\n\n`;
+      alertMessage += `Indicators:\n`;
+      alertMessage += `- Suspicious Login Pattern: ${fraudReport.suspiciousLoginPattern ? "⚠️ YES" : "✅ NO"}\n`;
+      alertMessage += `- Self Referral: ${fraudReport.selfReferral ? "⚠️ YES" : "✅ NO"}\n`;
+      alertMessage += `- Rapid Withdrawals: ${fraudReport.rapidWithdrawals ? "⚠️ YES" : "✅ NO"}\n\n`;
+      
+      if (fraudReport.riskScore >= 50) {
+        alertMessage += `🚨 HIGH RISK - Recommend immediate review and possible suspension`;
+      } else if (fraudReport.riskScore >= 30) {
+        alertMessage += `⚠️ MEDIUM RISK - Monitor closely`;
+      } else {
+        alertMessage += `✅ LOW RISK - No immediate action needed`;
+      }
+      
+      alert(alertMessage);
+    } catch (error) {
+      console.error("Error running fraud detection:", error);
+      alert("Failed to run fraud detection");
+    }
+  };
+
+  const handleExportSelected = () => {
+    const selectedUserData = detailedUsers.filter(u => selectedUsers.includes(u.id));
+    
+    const csvData = selectedUserData.map(user => ({
+      "User ID": user.id,
+      "Full Name": user.full_name,
+      "Email": user.email,
+      "Phone": user.phone || "N/A",
+      "Referral Code": user.referral_code,
+      "Status": user.status,
+      "KYC Status": user.kyc_status,
+      "Balance": user.current_balance || 0,
+      "Total Deposits": user.total_deposits || 0,
+      "Total Withdrawals": user.total_withdrawals || 0,
+      "Star Rank": user.star_rank || "N/A",
+      "Team Size": user.team_size || 0,
+      "Team Volume": user.team_volume || 0,
+      "Direct Referrals": user.direct_referrals || 0,
+      "Total Commissions": user.total_commissions || 0,
+      "2FA Enabled": user.two_factor_enabled ? "Yes" : "No",
+      "Fraud Score": user.fraud_score || 0,
+      "Flagged for Review": user.is_flagged_for_review ? "Yes" : "No",
+      "Registration Date": user.created_at,
+      "Last Login": user.last_login || "N/A",
+    }));
+
+    exportToCSV(csvData, `sui24_selected_users_${new Date().toISOString().split("T")[0]}`);
+  };
+
+  const handleExportAllUsers = () => {
+    const csvData = detailedUsers.map(user => ({
+      "User ID": user.id,
+      "Full Name": user.full_name,
+      "Email": user.email,
+      "Phone": user.phone || "N/A",
+      "Referral Code": user.referral_code,
+      "Status": user.status,
+      "KYC Status": user.kyc_status,
+      "Balance": user.current_balance || 0,
+      "Total Deposits": user.total_deposits || 0,
+      "Total Withdrawals": user.total_withdrawals || 0,
+      "Star Rank": user.star_rank || "N/A",
+      "Team Size": user.team_size || 0,
+      "Team Volume": user.team_volume || 0,
+      "Direct Referrals": user.direct_referrals || 0,
+      "Total Commissions": user.total_commissions || 0,
+      "2FA Enabled": user.two_factor_enabled ? "Yes" : "No",
+      "Fraud Score": user.fraud_score || 0,
+      "Flagged for Review": user.is_flagged_for_review ? "Yes" : "No",
+      "Registration Date": user.created_at,
+      "Last Login": user.last_login || "N/A",
+    }));
+
+    exportToCSV(csvData, `sui24_users_${new Date().toISOString().split("T")[0]}`);
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    alert(`${label} copied to clipboard!`);
+  };
+
+  // Filter users based on search and filters
+  const filteredUsers = detailedUsers;
+
   const toggleUserSelection = (userId: string) => {
-    setSelectedUsers(prev => 
-      prev.includes(userId) 
+    setSelectedUsers(prev =>
+      prev.includes(userId)
         ? prev.filter(id => id !== userId)
         : [...prev, userId]
     );
@@ -322,161 +358,74 @@ export default function AdminDashboard() {
     }
   };
 
-  const executeBulkAction = () => {
-    if (selectedUsers.length === 0) {
-      alert("Please select at least one user");
-      return;
-    }
+  // Mock data for charts (will be replaced with real data)
+  const revenueData = [
+    { date: "Mon", deposits: 45000, withdrawals: 12000, net: 33000, adminFees: 2250 },
+    { date: "Tue", deposits: 52000, withdrawals: 18000, net: 34000, adminFees: 2600 },
+    { date: "Wed", deposits: 48000, withdrawals: 15000, net: 33000, adminFees: 2400 },
+    { date: "Thu", deposits: 61000, withdrawals: 22000, net: 39000, adminFees: 3050 },
+    { date: "Fri", deposits: 55000, withdrawals: 19000, net: 36000, adminFees: 2750 },
+    { date: "Sat", deposits: 67000, withdrawals: 25000, net: 42000, adminFees: 3350 },
+    { date: "Sun", deposits: 58000, withdrawals: 20000, net: 38000, adminFees: 2900 },
+  ];
 
-    switch (bulkAction) {
-      case "suspend":
-        alert(`Suspending ${selectedUsers.length} users...`);
-        setSelectedUsers([]);
-        break;
-      case "activate":
-        alert(`Activating ${selectedUsers.length} users...`);
-        setSelectedUsers([]);
-        break;
-      case "delete":
-        if (confirm(`Are you sure you want to delete ${selectedUsers.length} users? This action cannot be undone.`)) {
-          alert(`Deleting ${selectedUsers.length} users...`);
-          setSelectedUsers([]);
-        }
-        break;
-      case "export":
-        exportSelectedUsersToCSV();
-        break;
-    }
-    setBulkAction("");
-  };
+  const packageDistribution = [
+    { name: "Package 1 (30 SUI)", users: 450, value: 45 },
+    { name: "Package 2 (100 SUI)", users: 280, value: 28 },
+    { name: "Package 3 (250 SUI)", users: 180, value: 18 },
+    { name: "Package 4 (750 SUI)", users: 90, value: 9 },
+  ];
 
-  const exportSelectedUsersToCSV = () => {
-    const selectedUserData = usersData.filter(u => selectedUsers.includes(u.id));
-    const csvData = selectedUserData.map(user => ({
-      "User ID": user.id,
-      "Full Name": user.full_name,
-      "Email": user.email,
-      "Phone": user.phone,
-      "Referral Code": user.referral_code,
-      "Status": user.status,
-      "KYC Status": user.kyc_status,
-      "Balance": user.current_balance,
-      "Total Deposits": user.total_deposits,
-      "Total Withdrawals": user.total_withdrawals,
-      "Star Rank": user.star_rank,
-      "Team Size": user.team_size,
-      "Team Volume": user.team_volume,
-      "Direct Referrals": user.direct_referrals,
-      "Total Commissions": user.total_commissions,
-      "Registered": user.created_at,
-      "Last Login": user.last_login,
-    }));
+  const transactionVolume = [
+    { type: "Deposits", count: 1250, volume: 385000 },
+    { type: "Withdrawals", count: 580, volume: 131000 },
+    { type: "P2P Transfers", count: 340, volume: 45000 },
+    { type: "ROI Claims", count: 2100, volume: 210000 },
+    { type: "Commissions", count: 890, volume: 89000 },
+  ];
 
-    const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `sui24_selected_users_${new Date().toISOString().split("T")[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setSelectedUsers([]);
-  };
+  const mlmLevelData = Array.from({ length: 24 }, (_, i) => ({
+    level: i + 1,
+    users: Math.max(100 - i * 4, 5),
+    volume: Math.max(50000 - i * 2000, 1000),
+    commission: [3.0, 2.0, 1.0, 0.5, 0.5, 0.5, ...Array(12).fill(0.25), 0.5, 0.5, 0.5, 1.0, 2.0, 3.0][i],
+  }));
 
-  const exportAllUsersToCSV = () => {
-    const csvData = filteredUsers.map(user => ({
-      "User ID": user.id,
-      "Full Name": user.full_name,
-      "Email": user.email,
-      "Phone": user.phone,
-      "Referral Code": user.referral_code,
-      "Status": user.status,
-      "KYC Status": user.kyc_status,
-      "Balance": user.current_balance,
-      "Total Deposits": user.total_deposits,
-      "Total Withdrawals": user.total_withdrawals,
-      "Star Rank": user.star_rank,
-      "Team Size": user.team_size,
-      "Team Volume": user.team_volume,
-      "Direct Referrals": user.direct_referrals,
-      "Total Commissions": user.total_commissions,
-      "Registered": user.created_at,
-      "Last Login": user.last_login,
-    }));
+  const platformEarnings = [
+    { source: "5% Entry Fee", amount: 19250 },
+    { source: "50% Withdrawal Tax", amount: 65500 },
+    { source: "P2P Transfer Fee (1%)", amount: 450 },
+    { source: "Trading Losses", amount: 12800 },
+  ];
 
-    const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `sui24_all_users_${new Date().toISOString().split("T")[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const sendPasswordResetEmail = (user: any) => {
-    alert(`Password reset email sent to ${user.email}!\n\nReset Link: https://sui24.trade/reset-password?token=${user.id}_reset_token\n\nThe user will receive an email with instructions to reset their password.`);
-  };
-
-  const openActivityTimeline = (user: any) => {
-    setSelectedUser(user);
-    setUserActivities(getUserActivities(user.id));
-    setShowActivityTimeline(true);
-  };
-
-  const handleViewUser = (user: any) => {
-    setSelectedUser(user);
-    setShowUserModal(true);
-    setShowPassword(false);
-    setNewPassword("");
-  };
-
-  const handleCopyText = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
-  };
-
-  const handlePasswordReset = () => {
-    if (newPassword.length < 6) {
-      alert("Password must be at least 6 characters");
-      return;
-    }
-    alert(`Password reset for ${selectedUser?.email}`);
-    setNewPassword("");
-    setShowUserModal(false);
-  };
-
-  const handleResetPassword = () => {
-    // Deprecated in favor of handlePasswordReset, keeping for compatibility if referenced
-    handlePasswordReset();
-  };
+  const COLORS = ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444"];
 
   // Export Handlers
-  const handleExportFullPDF = async () => {
-    await exportDashboardToPDF(
-      {
-        totalUsers: 12847,
-        totalVolume: "$4.5M",
-        platformEarnings: "$226,150",
-        activePackages: 3421,
-      },
-      revenueData,
-      userGrowthData,
-      packageDistribution,
-      transactionVolume,
-      mlmLevelData,
-      platformEarnings,
-      "sui24_admin_dashboard"
-    );
+  const handleExportFullReport = () => {
+    if (revenueChartRef.current) {
+      exportToPDF(
+        [
+          { title: "Key Metrics", data: [
+            { Metric: "Total Users", Value: "1,234" },
+            { Metric: "Total Volume", Value: "$860K" },
+            { Metric: "Platform Earnings", Value: "$98K" },
+            { Metric: "Active Packages", Value: "1,000" },
+          ]},
+          { title: "Revenue Analytics (Last 7 Days)", data: revenueData },
+          { title: "Package Distribution", data: packageDistribution },
+          { title: "Transaction Volume", data: transactionVolume },
+          { title: "MLM Performance (24 Levels)", data: mlmLevelData },
+          { title: "Platform Earnings Breakdown", data: platformEarnings },
+        ],
+        "SUI24 Admin Dashboard Report"
+      );
+    }
   };
 
-  const handleExportAllCSV = () => {
+  const handleExportAllData = () => {
     exportMultipleToCSV(
       [
         { name: "Revenue Analytics", data: revenueData },
-        { name: "User Growth", data: userGrowthData },
         { name: "Package Distribution", data: packageDistribution },
         { name: "Transaction Volume", data: transactionVolume },
         { name: "MLM Performance", data: mlmLevelData },
@@ -486,9 +435,9 @@ export default function AdminDashboard() {
     );
   };
 
-  const handleExportRevenuePDF = async () => {
+  const handleExportRevenueChart = () => {
     if (revenueChartRef.current) {
-      await exportChartToPDF(
+      exportChartToPDF(
         revenueChartRef.current,
         "Revenue Analytics - Last 7 Days",
         "sui24_revenue_chart"
@@ -498,151 +447,99 @@ export default function AdminDashboard() {
 
   return (
     <>
-      <SEO 
-        title="Admin Dashboard - Sui24.trade"
-        description="Administrative control panel for Sui24.trade platform"
+      <SEO
+        title="Admin Dashboard - SUI24"
+        description="Comprehensive admin control panel for SUI24 trading platform"
       />
-      
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900">
-        {/* Header */}
-        <header className="border-b border-white/10 bg-black/20 backdrop-blur-sm sticky top-0 z-50">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900 text-white p-8">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                Admin Dashboard
+              </h1>
+              <p className="text-purple-200 mt-2">Complete platform management and analytics</p>
+            </div>
+            <Link href="/dashboard">
+              <Button variant="outline" className="border-purple-400 text-purple-300 hover:bg-purple-800">
+                Back to Dashboard
+              </Button>
+            </Link>
+          </div>
+
+          {/* Stats Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="p-6 bg-gradient-to-br from-purple-800 to-purple-900 border-purple-700">
               <div className="flex items-center gap-4">
-                <Shield className="w-8 h-8 text-purple-400" />
+                <Users className="h-12 w-12 text-purple-400" />
                 <div>
-                  <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
-                  <p className="text-xs text-white/60">Master Control Panel</p>
+                  <p className="text-purple-300 text-sm">Total Users</p>
+                  <p className="text-3xl font-bold">{detailedUsers.length}</p>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export
-                </Button>
-                <Link href="/dashboard">
-                  <Button variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10">
-                    User View
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Quick Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-white/60 mb-1">Total Users</p>
-                  <p className="text-3xl font-black text-white">{stats.totalUsers.toLocaleString()}</p>
-                  <p className="text-xs text-green-400 mt-2 flex items-center gap-1">
-                    <ArrowUpRight className="w-3 h-3" />
-                    +12.5% vs last week
-                  </p>
-                </div>
-                <Users className="w-12 h-12 text-purple-400 opacity-50" />
               </div>
             </Card>
 
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between">
+            <Card className="p-6 bg-gradient-to-br from-pink-800 to-pink-900 border-pink-700">
+              <div className="flex items-center gap-4">
+                <DollarSign className="h-12 w-12 text-pink-400" />
                 <div>
-                  <p className="text-sm text-white/60 mb-1">Total Volume</p>
-                  <p className="text-3xl font-black text-white">${(stats.totalVolume / 1000).toFixed(1)}M</p>
-                  <p className="text-xs text-green-400 mt-2 flex items-center gap-1">
-                    <ArrowUpRight className="w-3 h-3" />
-                    +8.3% vs last week
-                  </p>
+                  <p className="text-pink-300 text-sm">Total Volume</p>
+                  <p className="text-3xl font-bold">$860K</p>
                 </div>
-                <TrendingUp className="w-12 h-12 text-green-400 opacity-50" />
               </div>
             </Card>
 
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between">
+            <Card className="p-6 bg-gradient-to-br from-purple-800 to-pink-900 border-purple-700">
+              <div className="flex items-center gap-4">
+                <TrendingUp className="h-12 w-12 text-purple-400" />
                 <div>
-                  <p className="text-sm text-white/60 mb-1">Platform Earnings</p>
-                  <p className="text-3xl font-black text-white">${stats.totalEarnings.toLocaleString()}</p>
-                  <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1">
-                    <DollarSign className="w-3 h-3" />
-                    Secret Admin Wallet
-                  </p>
+                  <p className="text-purple-300 text-sm">Platform Earnings</p>
+                  <p className="text-3xl font-bold">$98K</p>
                 </div>
-                <Wallet className="w-12 h-12 text-yellow-400 opacity-50" />
               </div>
             </Card>
 
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between">
+            <Card className="p-6 bg-gradient-to-br from-pink-800 to-purple-900 border-pink-700">
+              <div className="flex items-center gap-4">
+                <Package className="h-12 w-12 text-pink-400" />
                 <div>
-                  <p className="text-sm text-white/60 mb-1">Active Packages</p>
-                  <p className="text-3xl font-black text-white">{stats.activePackages.toLocaleString()}</p>
-                  <p className="text-xs text-blue-400 mt-2 flex items-center gap-1">
-                    <Package className="w-3 h-3" />
-                    Earning ROI
-                  </p>
+                  <p className="text-pink-300 text-sm">Active Packages</p>
+                  <p className="text-3xl font-bold">1,000</p>
                 </div>
-                <Activity className="w-12 h-12 text-blue-400 opacity-50" />
               </div>
             </Card>
-          </div>
-
-          {/* Period Selector */}
-          <div className="flex items-center gap-2 mb-6">
-            <Calendar className="w-5 h-5 text-white/60" />
-            <div className="flex gap-2">
-              {(["24h", "7d", "30d", "90d", "1y"] as const).map((period) => (
-                <Button
-                  key={period}
-                  size="sm"
-                  variant={selectedPeriod === period ? "default" : "outline"}
-                  className={selectedPeriod === period 
-                    ? "bg-purple-500 hover:bg-purple-600" 
-                    : "border-white/20 text-white hover:bg-white/10"
-                  }
-                  onClick={() => setSelectedPeriod(period)}
-                >
-                  {period}
-                </Button>
-              ))}
-            </div>
           </div>
 
           {/* Export Actions */}
-          <Card className="p-6 bg-gradient-to-br from-purple-900/20 to-pink-900/20 border-purple-500/20">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold mb-1">📊 Export Dashboard Data</h3>
-                <p className="text-sm text-gray-400">Download reports in PDF or CSV format</p>
-              </div>
-              
-              <div className="flex flex-wrap gap-3">
+          <Card className="p-6 bg-gradient-to-br from-purple-800/50 to-pink-800/50 border-purple-600">
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+              <h3 className="text-xl font-semibold flex items-center gap-2">
+                <Download className="h-5 w-5" />
+                Export Dashboard Data
+              </h3>
+              <div className="flex gap-3">
                 <Button
-                  onClick={handleExportFullPDF}
+                  onClick={handleExportFullReport}
                   className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                 >
-                  <FileText className="w-4 h-4 mr-2" />
+                  <FileText className="h-4 w-4 mr-2" />
                   Export Full Report (PDF)
                 </Button>
-                
                 <Button
-                  onClick={handleExportAllCSV}
+                  onClick={handleExportAllData}
                   variant="outline"
-                  className="border-purple-500/30 hover:bg-purple-500/10"
+                  className="border-purple-400 text-purple-300 hover:bg-purple-800"
                 >
-                  <TableIcon className="w-4 h-4 mr-2" />
+                  <Table className="h-4 w-4 mr-2" />
                   Export All Data (CSV)
                 </Button>
-                
                 <Button
-                  onClick={handleExportRevenuePDF}
+                  onClick={handleExportRevenueChart}
                   variant="outline"
-                  className="border-pink-500/30 hover:bg-pink-500/10"
+                  className="border-pink-400 text-pink-300 hover:bg-pink-800"
                 >
-                  <Download className="w-4 h-4 mr-2" />
+                  <BarChart3 className="h-4 w-4 mr-2" />
                   Revenue Chart (PDF)
                 </Button>
               </div>
@@ -650,822 +547,784 @@ export default function AdminDashboard() {
           </Card>
 
           {/* Charts Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Revenue Analytics */}
-            <Card className="p-6 col-span-2" ref={revenueChartRef}>
-              <h3 className="text-lg font-semibold mb-4">💰 Revenue Analytics</h3>
+            <Card className="p-6 bg-purple-900/50 border-purple-700" ref={revenueChartRef}>
+              <h3 className="text-xl font-semibold mb-4">Revenue Analytics</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={revenueData}>
-                  <defs>
-                    <linearGradient id="colorDeposits" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorWithdrawals" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorAdminFees" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                  <XAxis dataKey="date" stroke="#ffffff60" />
-                  <YAxis stroke="#ffffff60" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1a0b2e', 
-                      border: '1px solid #8b5cf6',
-                      borderRadius: '8px'
-                    }}
-                    labelStyle={{ color: '#fff' }}
-                  />
+                <LineChart data={revenueData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#9333ea" />
+                  <XAxis dataKey="date" stroke="#e9d5ff" />
+                  <YAxis stroke="#e9d5ff" />
+                  <Tooltip contentStyle={{ backgroundColor: "#581c87", border: "1px solid #9333ea" }} />
                   <Legend />
-                  <Area type="monotone" dataKey="deposits" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorDeposits)" />
-                  <Area type="monotone" dataKey="withdrawals" stroke="#ef4444" fillOpacity={1} fill="url(#colorWithdrawals)" />
-                  <Area type="monotone" dataKey="adminFees" stroke="#22c55e" fillOpacity={1} fill="url(#colorAdminFees)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Card>
-
-            {/* User Growth Chart */}
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-green-400" />
-                    User Growth
-                  </h3>
-                  <p className="text-sm text-white/60">Total vs active users</p>
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <RechartsLine data={userGrowthData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                  <XAxis dataKey="month" stroke="#ffffff60" />
-                  <YAxis stroke="#ffffff60" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1a0b2e', 
-                      border: '1px solid #8b5cf6',
-                      borderRadius: '8px'
-                    }}
-                    labelStyle={{ color: '#fff' }}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="users" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6', r: 4 }} />
-                  <Line type="monotone" dataKey="active" stroke="#22c55e" strokeWidth={3} dot={{ fill: '#22c55e', r: 4 }} />
-                </RechartsLine>
+                  <Line type="monotone" dataKey="deposits" stroke="#8b5cf6" strokeWidth={2} />
+                  <Line type="monotone" dataKey="withdrawals" stroke="#ec4899" strokeWidth={2} />
+                  <Line type="monotone" dataKey="net" stroke="#10b981" strokeWidth={2} />
+                </LineChart>
               </ResponsiveContainer>
             </Card>
 
             {/* Package Distribution */}
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <PieChart className="w-5 h-5 text-pink-400" />
-                    Package Distribution
-                  </h3>
-                  <p className="text-sm text-white/60">Investment package popularity</p>
-                </div>
-              </div>
+            <Card className="p-6 bg-pink-900/50 border-pink-700">
+              <h3 className="text-xl font-semibold mb-4">Package Distribution</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <RechartsPie>
+                <PieChart>
                   <Pie
                     data={packageDistribution}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                    outerRadius={100}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
                     fill="#8884d8"
-                    dataKey="value"
+                    dataKey="users"
                   >
                     {packageDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1a0b2e', 
-                      border: '1px solid #8b5cf6',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Legend />
-                </RechartsPie>
+                  <Tooltip contentStyle={{ backgroundColor: "#831843", border: "1px solid #ec4899" }} />
+                </PieChart>
               </ResponsiveContainer>
             </Card>
 
             {/* Transaction Volume */}
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-blue-400" />
-                    Transaction Volume
-                  </h3>
-                  <p className="text-sm text-white/60">By transaction type</p>
-                </div>
-              </div>
+            <Card className="p-6 bg-purple-900/50 border-purple-700">
+              <h3 className="text-xl font-semibold mb-4">Transaction Volume</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <RechartsBar data={transactionVolume}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                  <XAxis dataKey="type" stroke="#ffffff60" angle={-15} textAnchor="end" height={80} />
-                  <YAxis stroke="#ffffff60" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1a0b2e', 
-                      border: '1px solid #8b5cf6',
-                      borderRadius: '8px'
-                    }}
-                  />
+                <BarChart data={transactionVolume}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#9333ea" />
+                  <XAxis dataKey="type" stroke="#e9d5ff" />
+                  <YAxis stroke="#e9d5ff" />
+                  <Tooltip contentStyle={{ backgroundColor: "#581c87", border: "1px solid #9333ea" }} />
                   <Legend />
-                  <Bar dataKey="volume" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
-                </RechartsBar>
+                  <Bar dataKey="count" fill="#8b5cf6" />
+                  <Bar dataKey="volume" fill="#ec4899" />
+                </BarChart>
               </ResponsiveContainer>
             </Card>
 
-            {/* Platform Earnings Breakdown */}
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-yellow-400" />
-                    Platform Earnings
-                  </h3>
-                  <p className="text-sm text-white/60">Revenue sources breakdown</p>
-                </div>
-              </div>
+            {/* Platform Earnings */}
+            <Card className="p-6 bg-pink-900/50 border-pink-700">
+              <h3 className="text-xl font-semibold mb-4">Platform Earnings Breakdown</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <RechartsPie>
+                <PieChart>
                   <Pie
                     data={platformEarnings}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                    outerRadius={100}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
                     fill="#8884d8"
                     dataKey="amount"
                   >
                     {platformEarnings.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1a0b2e', 
-                      border: '1px solid #8b5cf6',
-                      borderRadius: '8px'
-                    }}
-                    formatter={(value: number) => `$${value.toLocaleString()}`}
-                  />
-                  <Legend />
-                </RechartsPie>
-              </ResponsiveContainer>
-            </Card>
-
-            {/* ROI Claims Activity */}
-            <Card className="glass-effect border-white/10 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-green-400" />
-                    ROI Claims Activity
-                  </h3>
-                  <p className="text-sm text-white/60">3-hour interval claims</p>
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <RechartsBar data={roiClaimsData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                  <XAxis dataKey="hour" stroke="#ffffff60" />
-                  <YAxis stroke="#ffffff60" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1a0b2e', 
-                      border: '1px solid #8b5cf6',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="claims" fill="#22c55e" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="missed" fill="#ef4444" radius={[8, 8, 0, 0]} />
-                </RechartsBar>
+                  <Tooltip contentStyle={{ backgroundColor: "#831843", border: "1px solid #ec4899" }} />
+                </PieChart>
               </ResponsiveContainer>
             </Card>
           </div>
 
-          {/* MLM Level Performance Table */}
-          <Card className="glass-effect border-white/10 p-6 mb-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-purple-400" />
-                  MLM Level Performance
-                </h3>
-                <p className="text-sm text-white/60">24-level commission breakdown</p>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/10">
-                    <th className="text-left text-white/60 py-3 px-4">Level</th>
-                    <th className="text-left text-white/60 py-3 px-4">Users</th>
-                    <th className="text-left text-white/60 py-3 px-4">Volume</th>
-                    <th className="text-left text-white/60 py-3 px-4">Commission</th>
-                    <th className="text-left text-white/60 py-3 px-4">Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mlmLevelData.map((level, idx) => (
-                    <tr key={idx} className="border-b border-white/5 hover:bg-white/5">
-                      <td className="py-3 px-4 text-white font-semibold">{level.level}</td>
-                      <td className="py-3 px-4 text-white/80">{level.users.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-white/80">${level.volume.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-green-400 font-bold">${level.commission.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-purple-400">{level.rate}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          {/* Active Users Timeline */}
-          <Card className="glass-effect border-white/10 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-blue-400" />
-                  Active Users Timeline
-                </h3>
-                <p className="text-sm text-white/60">Real-time user activity (24h)</p>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={activeUsersData}>
-                <defs>
-                  <linearGradient id="colorOnline" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorTrading" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorClaiming" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#eab308" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                <XAxis dataKey="time" stroke="#ffffff60" />
-                <YAxis stroke="#ffffff60" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1a0b2e', 
-                    border: '1px solid #8b5cf6',
-                    borderRadius: '8px'
-                  }}
-                  labelStyle={{ color: '#fff' }}
-                />
-                <Legend />
-                <Area type="monotone" dataKey="online" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorOnline)" />
-                <Area type="monotone" dataKey="trading" stroke="#22c55e" fillOpacity={1} fill="url(#colorTrading)" />
-                <Area type="monotone" dataKey="claiming" stroke="#eab308" fillOpacity={1} fill="url(#colorClaiming)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Card>
-
           {/* User Management Section */}
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold">User Management</h3>
-              <Button onClick={exportAllUsersToCSV} variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export All Users (CSV)
-              </Button>
-            </div>
-
-            {/* Search and Filter Bar */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-              {/* Search */}
-              <div className="md:col-span-2">
-                <Input
-                  placeholder="Search by name, email, or referral code..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
-                className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-              </select>
-
-              {/* KYC Filter */}
-              <select
-                value={filterKYC}
-                onChange={(e) => setFilterKYC(e.target.value as any)}
-                className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm"
-              >
-                <option value="all">All KYC</option>
-                <option value="verified">Verified</option>
-                <option value="pending">Pending</option>
-                <option value="not_verified">Not Verified</option>
-              </select>
-
-              {/* Rank Filter */}
-              <select
-                value={filterRank}
-                onChange={(e) => setFilterRank(e.target.value as any)}
-                className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm"
-              >
-                <option value="all">All Ranks</option>
-                <option value="star1">Star 1</option>
-                <option value="star2">Star 2</option>
-                <option value="star3">Star 3</option>
-                <option value="star4">Star 4</option>
-                <option value="star5">Star 5</option>
-                <option value="star6">Star 6</option>
-                <option value="star7">Star 7</option>
-              </select>
-            </div>
-
-            {/* Bulk Actions Bar */}
-            {selectedUsers.length > 0 && (
-              <div className="flex items-center gap-4 mb-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                <span className="text-sm font-medium">
-                  {selectedUsers.length} user{selectedUsers.length > 1 ? "s" : ""} selected
-                </span>
-                <select
-                  value={bulkAction}
-                  onChange={(e) => setBulkAction(e.target.value as any)}
-                  className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-sm"
+          <Card className="p-6 bg-purple-900/50 border-purple-700">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-bold flex items-center gap-2">
+                  <Users className="h-6 w-6" />
+                  User Management
+                </h3>
+                <Button
+                  onClick={handleExportAllUsers}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                 >
-                  <option value="">Choose Action...</option>
-                  <option value="activate">Activate</option>
-                  <option value="suspend">Suspend</option>
-                  <option value="export">Export Selected</option>
-                  <option value="delete">Delete</option>
-                </select>
-                {bulkAction && (
-                  <Button onClick={executeBulkAction} size="sm" variant="default">
-                    Execute
-                  </Button>
-                )}
-                <Button onClick={() => setSelectedUsers([])} size="sm" variant="outline">
-                  Clear Selection
+                  <Download className="h-4 w-4 mr-2" />
+                  Export All Users (CSV)
                 </Button>
               </div>
-            )}
 
-            {/* Users Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left p-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
-                        onChange={toggleSelectAll}
-                        className="w-4 h-4"
-                      />
-                    </th>
-                    <th className="text-left p-3">User Info</th>
-                    <th className="text-left p-3">Status</th>
-                    <th className="text-left p-3">Balance</th>
-                    <th className="text-left p-3">Team</th>
-                    <th className="text-left p-3">Rank</th>
-                    <th className="text-left p-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                      <td className="p-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedUsers.includes(user.id)}
-                          onChange={() => toggleUserSelection(user.id)}
-                          className="w-4 h-4"
-                        />
-                      </td>
-                      <td className="p-3">
-                        <div>
-                          <div className="font-medium">{user.full_name}</div>
-                          <div className="text-sm text-gray-400">{user.email}</div>
-                          <div className="text-xs text-gray-500">Ref: {user.referral_code}</div>
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <div className="space-y-1">
-                          <Badge variant={user.status === "active" ? "default" : "destructive"}>
-                            {user.status}
-                          </Badge>
-                          <span
-                            className={`px-2 py-1 rounded text-xs ${
-                              user.kyc_status === "verified"
-                                ? "bg-blue-500/20 text-blue-400"
-                                : user.kyc_status === "pending"
-                                ? "bg-yellow-500/20 text-yellow-400"
-                                : "bg-gray-500/20 text-gray-400"
-                            }`}
-                          >
-                            {user.kyc_status}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-3 text-sm">${user.current_balance.toLocaleString()}</td>
-                      <td className="p-3 text-sm">
-                        <div>{user.team_size} users</div>
-                        <div className="text-gray-400">${(user.team_volume / 1000).toFixed(0)}K</div>
-                      </td>
-                      <td className="p-3">
-                        <Badge variant="outline">{user.star_rank}</Badge>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setShowUserModal(true);
-                            }}
-                          >
-                            👤
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openActivityTimeline(user)}
-                          >
-                            📊
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={user.status === "active" ? "destructive" : "default"}
-                            onClick={() => alert(`User ${user.status === "active" ? "suspended" : "activated"}`)}
-                          >
-                            {user.status === "active" ? "Suspend" : "Activate"}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+              {/* Search and Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-purple-400" />
+                  <Input
+                    placeholder="Search users..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 bg-purple-800/50 border-purple-600 text-white placeholder:text-purple-400"
+                  />
+                </div>
 
-            {/* Results Count */}
-            <div className="mt-4 text-sm text-gray-400">
-              Showing {filteredUsers.length} of {usersData.length} users
-            </div>
-          </Card>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-purple-800 border-purple-600">
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                  </SelectContent>
+                </Select>
 
-          {/* User Details Modal */}
-          <Dialog open={showUserModal} onOpenChange={setShowUserModal}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-900 border-purple-500/20">
-              <DialogHeader>
-                <DialogTitle className="text-2xl font-bold text-purple-400">
-                  User Details - {selectedUser?.full_name}
-                </DialogTitle>
-                <DialogDescription className="text-gray-400">
-                  Manage user account, password, and referral information
-                </DialogDescription>
-              </DialogHeader>
+                <Select value={kycFilter} onValueChange={setKycFilter}>
+                  <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                    <SelectValue placeholder="Filter by KYC" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-purple-800 border-purple-600">
+                    <SelectItem value="all">All KYC</SelectItem>
+                    <SelectItem value="verified">Verified</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="not_verified">Not Verified</SelectItem>
+                  </SelectContent>
+                </Select>
 
-              {selectedUser && (
-                <div className="space-y-6 mt-4">
-                  {/* Account Information */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <Card className="p-4 bg-gray-800 border-gray-700">
-                      <h4 className="font-semibold mb-3 text-purple-400">Account Information</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">User ID:</span>
-                          <span>{selectedUser.id}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Email:</span>
-                          <span>{selectedUser.email}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Phone:</span>
-                          <span>{selectedUser.phone}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Created:</span>
-                          <span>{selectedUser.created_at}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Last Login:</span>
-                          <span className="text-xs">{selectedUser.last_login}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">IP Address:</span>
-                          <span>{selectedUser.ip_address}</span>
-                        </div>
-                      </div>
-                    </Card>
+                <Select value={rankFilter} onValueChange={setRankFilter}>
+                  <SelectTrigger className="bg-purple-800/50 border-purple-600 text-white">
+                    <SelectValue placeholder="Filter by rank" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-purple-800 border-purple-600">
+                    <SelectItem value="all">All Ranks</SelectItem>
+                    {[1, 2, 3, 4, 5, 6, 7].map(rank => (
+                      <SelectItem key={rank} value={`star_${rank}`}>Star {rank}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                    <Card className="p-4 bg-gray-800 border-gray-700">
-                      <h4 className="font-semibold mb-3 text-purple-400">Financial Summary</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Total Deposits:</span>
-                          <span className="text-green-400">${selectedUser.total_deposits.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Total Withdrawals:</span>
-                          <span className="text-red-400">${selectedUser.total_withdrawals.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Current Balance:</span>
-                          <span className="text-blue-400 font-bold">${selectedUser.current_balance.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Active Packages:</span>
-                          <span>{selectedUser.active_packages}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Total Commissions:</span>
-                          <span className="text-purple-400">${selectedUser.total_commissions.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    </Card>
-                  </div>
-
-                  {/* Password Management */}
-                  <Card className="p-4">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                      <span>🔐</span> Password Management
-                    </h4>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-sm text-gray-400">Current Password Hash</label>
-                        <div className="flex gap-2 mt-1">
-                          <Input
-                            type={showPassword ? "text" : "password"}
-                            value={selectedUser.password_hash}
-                            readOnly
-                            className="flex-1"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setShowPassword(!showPassword)}
-                          >
-                            {showPassword ? "🙈" : "👁"}
-                          </Button>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-sm text-gray-400">Reset Password</label>
-                        <div className="flex gap-2 mt-1">
-                          <Input
-                            type="password"
-                            placeholder="Enter new password..."
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            className="flex-1"
-                          />
-                          <Button size="sm" onClick={handlePasswordReset}>
-                            Reset
-                          </Button>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => sendPasswordResetEmail(selectedUser)}
-                      >
-                        📧 Send Password Reset Email
-                      </Button>
-                    </div>
-                  </Card>
-
-                  {/* Referral Information */}
-                  <Card className="p-4 bg-gray-800 border-gray-700">
-                    <h4 className="font-semibold mb-3 text-purple-400 flex items-center gap-2">
-                      <LinkIcon className="w-4 h-4" />
-                      Referral Information
-                    </h4>
-                    <div className="space-y-4">
-                      <div>
-                        <Label className="text-gray-400">Referral Code</Label>
-                        <div className="flex gap-2 mt-1">
-                          <Input
-                            value={selectedUser.referral_code}
-                            readOnly
-                            className="bg-gray-900 border-gray-700 font-mono"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCopyText(selectedUser.referral_code)}
-                            className="border-purple-500/50"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div>
-                        <Label className="text-gray-400">Referral Link</Label>
-                        <div className="flex gap-2 mt-1">
-                          <Input
-                            value={selectedUser.referral_link}
-                            readOnly
-                            className="bg-gray-900 border-gray-700 text-sm"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCopyText(selectedUser.referral_link)}
-                            className="border-purple-500/50"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-4 mt-4">
-                        <div className="text-center p-3 bg-gray-900 rounded-lg">
-                          <div className="text-2xl font-bold text-purple-400">{selectedUser.direct_referrals}</div>
-                          <div className="text-xs text-gray-400">Direct Referrals</div>
-                        </div>
-                        <div className="text-center p-3 bg-gray-900 rounded-lg">
-                          <div className="text-2xl font-bold text-blue-400">{selectedUser.team_size}</div>
-                          <div className="text-xs text-gray-400">Total Team Size</div>
-                        </div>
-                        <div className="text-center p-3 bg-gray-900 rounded-lg">
-                          <div className="text-2xl font-bold text-green-400">
-                            ${(selectedUser.team_volume / 1000).toFixed(0)}K
-                          </div>
-                          <div className="text-xs text-gray-400">Team Volume</div>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-
-                  {/* MLM Performance */}
-                  <Card className="p-4 bg-gray-800 border-gray-700">
-                    <h4 className="font-semibold mb-3 text-purple-400">MLM Performance</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <span className="text-gray-400 text-sm">Star Rank:</span>
-                        <div className="text-xl font-bold text-purple-400 mt-1">{selectedUser.star_rank}</div>
-                      </div>
-                      <div>
-                        <span className="text-gray-400 text-sm">Total Commissions Earned:</span>
-                        <div className="text-xl font-bold text-green-400 mt-1">
-                          ${selectedUser.total_commissions.toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
+              {/* Bulk Actions Bar */}
+              {selectedUsers.length > 0 && (
+                <div className="flex items-center gap-4 p-4 bg-purple-800/50 border border-purple-600 rounded-lg">
+                  <span className="text-purple-200">{selectedUsers.length} users selected</span>
+                  <Select value={bulkAction} onValueChange={setBulkAction}>
+                    <SelectTrigger className="w-48 bg-purple-700 border-purple-500 text-white">
+                      <SelectValue placeholder="Select action..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-purple-800 border-purple-600">
+                      <SelectItem value="activate">Activate</SelectItem>
+                      <SelectItem value="suspend">Suspend</SelectItem>
+                      <SelectItem value="export">Export Selected</SelectItem>
+                      <SelectItem value="delete">Delete</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={handleBulkAction}
+                    disabled={!bulkAction}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    Execute
+                  </Button>
+                  <Button
+                    onClick={() => setSelectedUsers([])}
+                    variant="outline"
+                    className="border-purple-400 text-purple-300 hover:bg-purple-800"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Clear Selection
+                  </Button>
                 </div>
               )}
 
-              {/* Activity Timeline Dialog */}
-              <Dialog open={showActivityTimeline} onOpenChange={setShowActivityTimeline}>
-                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <span>📊</span>
-                      Activity Timeline - {selectedUser?.full_name}
-                    </DialogTitle>
-                  </DialogHeader>
-                  
-                  {selectedUser && (
-                    <div className="space-y-4">
-                      {/* User Summary */}
-                      <Card className="p-4 bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-purple-500/20">
-                        <div className="grid grid-cols-4 gap-4 text-center">
-                          <div>
-                            <div className="text-2xl font-bold text-purple-400">{userActivities.length}</div>
-                            <div className="text-xs text-gray-400">Total Activities</div>
-                          </div>
-                          <div>
-                            <div className="text-2xl font-bold text-green-400">{selectedUser.total_deposits}</div>
-                            <div className="text-xs text-gray-400">Total Deposits</div>
-                          </div>
-                          <div>
-                            <div className="text-2xl font-bold text-blue-400">{selectedUser.total_commissions}</div>
-                            <div className="text-xs text-gray-400">Commissions</div>
-                          </div>
-                          <div>
-                            <div className="text-2xl font-bold text-pink-400">{selectedUser.direct_referrals}</div>
-                            <div className="text-xs text-gray-400">Referrals</div>
-                          </div>
-                        </div>
-                      </Card>
-
-                      {/* Timeline */}
-                      <div className="space-y-3">
-                        <h4 className="font-semibold text-sm text-gray-400">Recent Activity</h4>
-                        {userActivities.map((activity, index) => (
-                          <div key={activity.id} className="flex gap-4 items-start">
-                            {/* Icon */}
-                            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg">
-                              {activity.icon}
+              {/* User Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-purple-800">
+                    <tr>
+                      <th className="p-3 text-left">
+                        <Checkbox
+                          checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                          className="border-purple-400"
+                        />
+                      </th>
+                      <th className="p-3 text-left">User Info</th>
+                      <th className="p-3 text-left">Status</th>
+                      <th className="p-3 text-left">Balance</th>
+                      <th className="p-3 text-left">Team</th>
+                      <th className="p-3 text-left">2FA</th>
+                      <th className="p-3 text-left">Fraud</th>
+                      <th className="p-3 text-left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-purple-300">
+                          Loading users...
+                        </td>
+                      </tr>
+                    ) : filteredUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-purple-300">
+                          No users found
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredUsers.map((user) => (
+                        <tr key={user.id} className="border-b border-purple-700 hover:bg-purple-800/30">
+                          <td className="p-3">
+                            <Checkbox
+                              checked={selectedUsers.includes(user.id)}
+                              onCheckedChange={() => toggleUserSelection(user.id)}
+                              className="border-purple-400"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <div>
+                              <div className="font-semibold">{user.full_name || "N/A"}</div>
+                              <div className="text-xs text-purple-300">{user.email}</div>
+                              <div className="text-xs text-purple-400">{user.referral_code}</div>
                             </div>
-
-                            {/* Content */}
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <div className="font-medium capitalize">{activity.type.replace("_", " ")}</div>
-                                <div className="text-xs text-gray-500">{activity.timestamp}</div>
+                          </td>
+                          <td className="p-3">
+                            <div className="space-y-1">
+                              <Badge
+                                variant={user.status === "active" ? "default" : "destructive"}
+                                className={
+                                  user.status === "active"
+                                    ? "bg-green-600 hover:bg-green-700"
+                                    : "bg-red-600 hover:bg-red-700"
+                                }
+                              >
+                                {user.status}
+                              </Badge>
+                              <div>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    user.kyc_status === "verified"
+                                      ? "border-green-500 text-green-400"
+                                      : user.kyc_status === "pending"
+                                      ? "border-yellow-500 text-yellow-400"
+                                      : "border-red-500 text-red-400"
+                                  }
+                                >
+                                  {user.kyc_status || "not_verified"}
+                                </Badge>
                               </div>
-                              <div className="text-sm text-gray-400 mt-1">{activity.description}</div>
                             </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="font-semibold text-green-400">
+                              ${user.current_balance?.toFixed(2) || "0.00"}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div>
+                              <div className="font-semibold">{user.star_rank || "N/A"}</div>
+                              <div className="text-xs text-purple-300">{user.team_size || 0} users</div>
+                              <div className="text-xs text-gray-500">${((user.team_volume || 0) / 1000).toFixed(0)}K</div>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <Badge
+                              variant={user.two_factor_enabled ? "default" : "outline"}
+                              className={
+                                user.two_factor_enabled
+                                  ? "bg-green-600 hover:bg-green-700"
+                                  : "border-gray-500 text-gray-400"
+                              }
+                            >
+                              {user.two_factor_enabled ? (
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                              ) : (
+                                <XCircle className="h-3 w-3 mr-1" />
+                              )}
+                              {user.two_factor_enabled ? "Enabled" : "Disabled"}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            <div className="space-y-1">
+                              <div className="text-sm font-semibold">
+                                Score: {user.fraud_score || 0}/100
+                              </div>
+                              {user.is_flagged_for_review && (
+                                <Badge variant="destructive" className="bg-red-600">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Flagged
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleViewDetails(user)}
+                                className="border-purple-400 text-purple-300 hover:bg-purple-800"
+                                title="View Details"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleViewActivity(user)}
+                                className="border-pink-400 text-pink-300 hover:bg-pink-800"
+                                title="View Activity"
+                              >
+                                <Activity className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRunFraudDetection(user.id)}
+                                className="border-red-400 text-red-300 hover:bg-red-800"
+                                title="Run Fraud Detection"
+                              >
+                                <Shield className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={user.status === "active" ? "destructive" : "default"}
+                                onClick={() => handleStatusToggle(user.id, user.status)}
+                                className={
+                                  user.status === "active"
+                                    ? "bg-red-600 hover:bg-red-700"
+                                    : "bg-green-600 hover:bg-green-700"
+                                }
+                              >
+                                {user.status === "active" ? "Suspend" : "Activate"}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-                            {/* Connector Line */}
-                            {index < userActivities.length - 1 && (
-                              <div className="absolute left-[1.25rem] mt-12 w-0.5 h-8 bg-gradient-to-b from-purple-500/50 to-transparent" />
-                            )}
-                          </div>
-                        ))}
+              <div className="text-center text-purple-300 text-sm">
+                Showing {filteredUsers.length} of {detailedUsers.length} users
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* User Details Dialog */}
+        <Dialog open={showUserModal} onOpenChange={setShowUserModal}>
+          <DialogContent className="max-w-4xl bg-purple-900 border-purple-700 text-white max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                User Details: {selectedUser?.full_name}
+              </DialogTitle>
+            </DialogHeader>
+            {selectedUser && (
+              <div className="space-y-4">
+                {/* Account Information */}
+                <Card className="p-4 bg-purple-800/50 border-purple-700">
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Account Information
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-purple-300">User ID:</span>
+                      <p className="font-mono text-xs">{selectedUser.id}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Email:</span>
+                      <p>{selectedUser.email}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Phone:</span>
+                      <p>{selectedUser.phone || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Registration Date:</span>
+                      <p>{new Date(selectedUser.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Last Login:</span>
+                      <p>{selectedUser.last_login ? new Date(selectedUser.last_login).toLocaleString() : "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">IP Address:</span>
+                      <p>{selectedUser.last_ip_address || "N/A"}</p>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Financial Summary */}
+                <Card className="p-4 bg-purple-800/50 border-purple-700">
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" />
+                    Financial Summary
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-purple-300">Total Deposits:</span>
+                      <p className="font-semibold text-green-400">${selectedUser.total_deposits || 0}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Total Withdrawals:</span>
+                      <p className="font-semibold text-red-400">${selectedUser.total_withdrawals || 0}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Current Balance:</span>
+                      <p className="font-semibold text-blue-400">${selectedUser.current_balance || 0}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Active Packages:</span>
+                      <p className="font-semibold">{selectedUser.user_packages?.length || 0}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Total Commissions:</span>
+                      <p className="font-semibold text-purple-400">${selectedUser.total_commissions || 0}</p>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Security Management */}
+                <Card className="p-4 bg-purple-800/50 border-purple-700">
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Security & Fraud Management
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">Two-Factor Authentication</p>
+                        <p className="text-xs text-purple-300">
+                          {selectedUser.two_factor_enabled ? "Currently enabled" : "Currently disabled"}
+                        </p>
                       </div>
-
-                      {/* Activity Stats */}
-                      <Card className="p-4">
-                        <h4 className="font-semibold mb-3 text-sm">Activity Breakdown</h4>
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                            <span className="text-gray-400">Logins</span>
-                            <span className="font-medium">1</span>
-                          </div>
-                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                            <span className="text-gray-400">Deposits</span>
-                            <span className="font-medium">1</span>
-                          </div>
-                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                            <span className="text-gray-400">ROI Claims</span>
-                            <span className="font-medium">1</span>
-                          </div>
-                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                            <span className="text-gray-400">Commissions</span>
-                            <span className="font-medium">1</span>
-                          </div>
-                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                            <span className="text-gray-400">P2P Transfers</span>
-                            <span className="font-medium">1</span>
-                          </div>
-                          <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                            <span className="text-gray-400">Withdrawals</span>
-                            <span className="font-medium">1</span>
-                          </div>
-                        </div>
-                      </Card>
-
-                      {/* Export Timeline */}
                       <Button
-                        onClick={() => {
-                          const csvData = userActivities.map(a => ({
-                            "Type": a.type,
-                            "Description": a.description,
-                            "Timestamp": a.timestamp,
-                          }));
-                          const csv = Papa.unparse(csvData);
-                          const blob = new Blob([csv], { type: "text/csv" });
-                          const url = window.URL.createObjectURL(blob);
-                          const link = document.createElement("a");
-                          link.href = url;
-                          link.download = `${selectedUser.full_name}_activity_${new Date().toISOString().split("T")[0]}.csv`;
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                        }}
-                        variant="outline"
-                        className="w-full"
+                        size="sm"
+                        onClick={() => handleToggle2FA(selectedUser.id, selectedUser.two_factor_enabled)}
+                        className={
+                          selectedUser.two_factor_enabled
+                            ? "bg-red-600 hover:bg-red-700"
+                            : "bg-green-600 hover:bg-green-700"
+                        }
                       >
-                        <Download className="w-4 h-4 mr-2" />
-                        Export Activity Timeline (CSV)
+                        {selectedUser.two_factor_enabled ? "Disable 2FA" : "Enable 2FA"}
                       </Button>
                     </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">Fraud Risk Score</p>
+                        <p className="text-xs text-purple-300">
+                          Current score: {selectedUser.fraud_score || 0}/100
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleRunFraudDetection(selectedUser.id)}
+                        className="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700"
+                      >
+                        <Shield className="h-4 w-4 mr-2" />
+                        Run Fraud Detection
+                      </Button>
+                    </div>
+
+                    {selectedUser.is_flagged_for_review && (
+                      <Alert className="bg-red-900/50 border-red-700">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          This user has been flagged for review due to suspicious activity patterns.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                </Card>
+
+                {/* Password Management */}
+                <Card className="p-4 bg-purple-800/50 border-purple-700">
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Eye className="h-5 w-5" />
+                    Password Management
+                  </h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm text-purple-300">Current Password Hash:</label>
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          value={selectedUser.password_hash || "hashed_password_***"}
+                          readOnly
+                          className="bg-purple-700/50 border-purple-600 text-white"
+                        />
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="border-purple-500"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-purple-300">Reset Password:</label>
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          type="password"
+                          placeholder="Enter new password (min 6 chars)"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="bg-purple-700/50 border-purple-600 text-white"
+                        />
+                        <Button
+                          onClick={handlePasswordReset}
+                          className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                        >
+                          Reset
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Button
+                        onClick={handleSendResetEmail}
+                        variant="outline"
+                        className="w-full border-purple-400 text-purple-300 hover:bg-purple-800"
+                      >
+                        <Mail className="h-4 w-4 mr-2" />
+                        Send Password Reset Email
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Referral Information */}
+                <Card className="p-4 bg-purple-800/50 border-purple-700">
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Referral Information
+                  </h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm text-purple-300">Referral Code:</label>
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          value={selectedUser.referral_code || "N/A"}
+                          readOnly
+                          className="bg-purple-700/50 border-purple-600 text-white"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(selectedUser.referral_code, "Referral code")}
+                          className="border-purple-500"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-purple-300">Referral Link:</label>
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          value={`https://sui24.trade?ref=${selectedUser.referral_code}`}
+                          readOnly
+                          className="bg-purple-700/50 border-purple-600 text-white"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(`https://sui24.trade?ref=${selectedUser.referral_code}`, "Referral link")}
+                          className="border-purple-500"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <span className="text-purple-300">Direct Referrals:</span>
+                        <p className="font-semibold text-lg">{selectedUser.direct_referrals || 0}</p>
+                      </div>
+                      <div>
+                        <span className="text-purple-300">Total Team Size:</span>
+                        <p className="font-semibold text-lg">{selectedUser.team_size || 0}</p>
+                      </div>
+                      <div>
+                        <span className="text-purple-300">Team Volume:</span>
+                        <p className="font-semibold text-lg text-green-400">${selectedUser.team_volume || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* MLM Performance */}
+                <Card className="p-4 bg-purple-800/50 border-purple-700">
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    MLM Performance
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-purple-300">Star Rank:</span>
+                      <p className="font-semibold text-lg text-yellow-400">{selectedUser.star_rank || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-purple-300">Total Commissions Earned:</span>
+                      <p className="font-semibold text-lg text-green-400">${selectedUser.total_commissions || 0}</p>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Admin Actions */}
+                <Card className="p-4 bg-purple-800/50 border-purple-700">
+                  <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <UserCog className="h-5 w-5" />
+                    Admin Actions
+                  </h4>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => handleImpersonateUser(selectedUser.id)}
+                      className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                    >
+                      <UserCog className="h-4 w-4 mr-2" />
+                      Login as User (Impersonate)
+                    </Button>
+                    <Button
+                      onClick={() => handleStatusToggle(selectedUser.id, selectedUser.status)}
+                      className={
+                        selectedUser.status === "active"
+                          ? "flex-1 bg-red-600 hover:bg-red-700"
+                          : "flex-1 bg-green-600 hover:bg-green-700"
+                      }
+                    >
+                      {selectedUser.status === "active" ? "Suspend Account" : "Activate Account"}
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Activity Timeline Dialog */}
+        <Dialog open={showActivityTimeline} onOpenChange={setShowActivityTimeline}>
+          <DialogContent className="max-w-4xl bg-purple-900 border-purple-700 text-white max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                Activity Timeline: {selectedUser?.full_name}
+              </DialogTitle>
+            </DialogHeader>
+            {selectedUser && (
+              <div className="space-y-4">
+                {/* User Quick Stats */}
+                <div className="grid grid-cols-3 gap-4">
+                  <Card className="p-4 bg-purple-800/50 border-purple-700">
+                    <p className="text-sm text-purple-300">Total Deposits</p>
+                    <p className="text-2xl font-bold text-green-400">${selectedUser.total_deposits || 0}</p>
+                  </Card>
+                  <Card className="p-4 bg-purple-800/50 border-purple-700">
+                    <p className="text-sm text-purple-300">Total Commissions</p>
+                    <p className="text-2xl font-bold text-purple-400">${selectedUser.total_commissions || 0}</p>
+                  </Card>
+                  <Card className="p-4 bg-purple-800/50 border-purple-700">
+                    <p className="text-sm text-purple-300">Direct Referrals</p>
+                    <p className="text-2xl font-bold text-pink-400">{selectedUser.direct_referrals || 0}</p>
+                  </Card>
+                </div>
+
+                {/* Activity Breakdown */}
+                <Card className="p-4 bg-purple-800/50 border-purple-700">
+                  <h4 className="text-lg font-semibold mb-3">Activity Breakdown</h4>
+                  <div className="grid grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <p className="text-purple-300">Logins</p>
+                      <p className="font-semibold">{userActivities.filter(a => a.activity_type === "login").length}</p>
+                    </div>
+                    <div>
+                      <p className="text-purple-300">Deposits</p>
+                      <p className="font-semibold">{userActivities.filter(a => a.activity_type === "deposit").length}</p>
+                    </div>
+                    <div>
+                      <p className="text-purple-300">ROI Claims</p>
+                      <p className="font-semibold">{userActivities.filter(a => a.activity_type === "roi_claim").length}</p>
+                    </div>
+                    <div>
+                      <p className="text-purple-300">Withdrawals</p>
+                      <p className="font-semibold">{userActivities.filter(a => a.activity_type === "withdrawal").length}</p>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Timeline */}
+                <div className="space-y-3">
+                  {userActivities.length === 0 ? (
+                    <Card className="p-8 bg-purple-800/30 border-purple-700 text-center">
+                      <Clock className="h-12 w-12 mx-auto text-purple-400 mb-2" />
+                      <p className="text-purple-300">No activity recorded yet</p>
+                    </Card>
+                  ) : (
+                    userActivities.map((activity, index) => (
+                      <Card key={index} className="p-4 bg-purple-800/50 border-purple-700">
+                        <div className="flex items-start gap-4">
+                          <div className={`p-2 rounded-full ${
+                            activity.activity_type === "login" ? "bg-blue-600" :
+                            activity.activity_type === "deposit" ? "bg-green-600" :
+                            activity.activity_type === "withdrawal" ? "bg-red-600" :
+                            activity.activity_type === "roi_claim" ? "bg-yellow-600" :
+                            activity.activity_type === "commission" ? "bg-purple-600" :
+                            "bg-gray-600"
+                          }`}>
+                            <Activity className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-semibold">{activity.description}</p>
+                                <p className="text-sm text-purple-300">
+                                  {new Date(activity.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                              <Badge className={
+                                activity.activity_type === "login" ? "bg-blue-600" :
+                                activity.activity_type === "deposit" ? "bg-green-600" :
+                                activity.activity_type === "withdrawal" ? "bg-red-600" :
+                                activity.activity_type === "roi_claim" ? "bg-yellow-600" :
+                                activity.activity_type === "commission" ? "bg-purple-600" :
+                                "bg-gray-600"
+                              }>
+                                {activity.activity_type}
+                              </Badge>
+                            </div>
+                            {activity.metadata && (
+                              <div className="mt-2 text-xs text-purple-400">
+                                {JSON.stringify(activity.metadata)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))
                   )}
-                </DialogContent>
-              </Dialog>
-            </DialogContent>
-          </Dialog>
-        </div>
+                </div>
+
+                <Button
+                  onClick={() => {
+                    const csvData = userActivities.map(a => ({
+                      "Timestamp": new Date(a.created_at).toLocaleString(),
+                      "Activity Type": a.activity_type,
+                      "Description": a.description,
+                      "IP Address": a.ip_address || "N/A",
+                    }));
+                    exportToCSV(csvData, `sui24_user_activity_${selectedUser.id}_${new Date().toISOString().split("T")[0]}`);
+                  }}
+                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Activity Timeline (CSV)
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </>
   );

@@ -1,6 +1,78 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import Papa from "papaparse";
+import html2canvas from "html2canvas";
+
+interface ExportData {
+  title: string;
+  data: any[];
+}
+
+export const exportToPDF = (datasets: ExportData[], filename: string) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.width;
+  
+  // Title
+  doc.setFontSize(20);
+  doc.setTextColor(102, 51, 153); // Purple
+  doc.text("SUI24 Admin Report", 14, 20);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30);
+
+  let yPos = 40;
+
+  datasets.forEach((dataset, index) => {
+    // Add new page if needed
+    if (yPos > 250) {
+      doc.addPage();
+      yPos = 20;
+    }
+
+    // Section Title
+    doc.setFontSize(14);
+    doc.setTextColor(0);
+    doc.text(dataset.title, 14, yPos);
+    yPos += 10;
+
+    // Create table headers and body from data
+    if (dataset.data.length > 0) {
+      const headers = Object.keys(dataset.data[0]);
+      const data = dataset.data.map(item => Object.values(item));
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [headers],
+        body: data,
+        theme: 'grid',
+        headStyles: { fillColor: [139, 92, 246] }, // Purple-500
+        styles: { fontSize: 8 },
+        margin: { top: 20 },
+      });
+      
+      // Update Y position for next section
+      // @ts-expect-error - access finalY from autoTable
+      yPos = doc.lastAutoTable.finalY + 20;
+    }
+  });
+
+  // Footer
+  const pageCount = doc.getNumberOfPages();
+  for(let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(
+      `Page ${i} of ${pageCount} - SUI24.trade Confidential`,
+      pageWidth / 2,
+      doc.internal.pageSize.height - 10,
+      { align: 'center' }
+    );
+  }
+
+  doc.save(`${filename}_${new Date().toISOString().split('T')[0]}.pdf`);
+};
 
 // Export data to CSV
 export function exportToCSV(data: any[], filename: string) {
