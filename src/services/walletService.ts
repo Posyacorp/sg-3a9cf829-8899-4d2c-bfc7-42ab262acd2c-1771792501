@@ -46,7 +46,7 @@ export async function p2pTransfer(data: {
     }
 
     // Check sufficient balance
-    const senderBalance = senderWallet.wallet[data.fromWallet];
+    const senderBalance = senderWallet.wallet[data.fromWallet] || 0;
     if (senderBalance < data.amount) {
       return { success: false, error: "Insufficient balance" };
     }
@@ -55,41 +55,57 @@ export async function p2pTransfer(data: {
     const p2pFee = data.amount * 0.01;
     const netAmount = data.amount - p2pFee;
 
-    // Deduct from sender
-    const { error: deductError } = await supabase.rpc("debit_wallet", {
-      p_user_id: user.id,
-      p_wallet_type: data.fromWallet,
-      p_amount: data.amount,
-    });
+    // Deduct from sender using SQL UPDATE
+    await supabase
+      .from("wallets")
+      .update({ 
+        [data.fromWallet]: supabase.raw(`${data.fromWallet} - ${data.amount}`) 
+      })
+      .eq("user_id", user.id);
 
-    if (deductError) return { success: false, error: deductError.message };
-
-    // Credit to receiver's P2P wallet
-    const { error: creditError } = await supabase.rpc("credit_wallet", {
-      p_user_id: data.toUserId,
-      p_wallet_type: "p2p_balance",
-      p_amount: netAmount,
-    });
-
-    if (creditError) return { success: false, error: creditError.message };
+    // Credit to receiver's P2P wallet using SQL UPDATE
+    await supabase
+      .from("wallets")
+      .update({ 
+        p2p_balance: supabase.raw(`p2p_balance + ${netAmount}`) 
+      })
+      .eq("user_id", data.toUserId);
 
     // Record P2P fee to admin
     await supabase.from("transactions").insert({
       user_id: user.id,
-      type: "p2p_fee",
+      type: "admin_fee",
+      wallet_type: "main",
       amount: p2pFee,
+      net_amount: 0,
       status: "completed",
-      description: "P2P transfer fee (1%)",
+      admin_note: "P2P transfer fee (1%)",
     });
 
-    // Record transfer transaction
-    await supabase.from("transactions").insert({
-      user_id: user.id,
-      type: "p2p_transfer",
-      amount: data.amount,
-      status: "completed",
-      description: `P2P transfer to user ${data.toUserId}`,
-    });
+    // Record transfer transactions
+    await supabase.from("transactions").insert([
+      {
+        user_id: user.id,
+        from_user_id: user.id,
+        to_user_id: data.toUserId,
+        type: "p2p_send",
+        wallet_type: data.fromWallet.replace("_balance", "") as "main" | "roi" | "earning" | "p2p",
+        amount: data.amount,
+        net_amount: netAmount,
+        fee: p2pFee,
+        status: "completed",
+      },
+      {
+        user_id: data.toUserId,
+        from_user_id: user.id,
+        to_user_id: data.toUserId,
+        type: "p2p_receive",
+        wallet_type: "p2p",
+        amount: netAmount,
+        net_amount: netAmount,
+        status: "completed",
+      }
+    ]);
 
     return { success: true, netAmount, fee: p2pFee };
   } catch (error: unknown) {
@@ -119,28 +135,19 @@ export async function internalTransfer(data: {
     }
 
     // Check sufficient balance
-    const balance = wallet.wallet[data.fromWallet];
+    const balance = wallet.wallet[data.fromWallet] || 0;
     if (balance < data.amount) {
       return { success: false, error: "Insufficient balance" };
     }
 
-    // Deduct from source wallet
-    const { error: deductError } = await supabase.rpc("debit_wallet", {
-      p_user_id: user.id,
-      p_wallet_type: data.fromWallet,
-      p_amount: data.amount,
-    });
-
-    if (deductError) return { success: false, error: deductError.message };
-
-    // Credit to destination wallet
-    const { error: creditError } = await supabase.rpc("credit_wallet", {
-      p_user_id: user.id,
-      p_wallet_type: data.toWallet,
-      p_amount: data.amount,
-    });
-
-    if (creditError) return { success: false, error: creditError.message };
+    // Perform internal transfer using SQL UPDATE
+    await supabase
+      .from("wallets")
+      .update({ 
+        [data.fromWallet]: supabase.raw(`${data.fromWallet} - ${data.amount}`),
+        [data.toWallet]: supabase.raw(`${data.toWallet} + ${data.amount}`)
+      })
+      .eq("user_id", user.id);
 
     return { success: true };
   } catch (error: unknown) {
@@ -158,14 +165,116 @@ export async function getTotalBalance(userId: string) {
     }
 
     const total = 
-      wallet.wallet.main_balance +
-      wallet.wallet.roi_balance +
-      wallet.wallet.earning_balance +
-      wallet.wallet.p2p_balance;
+      (wallet.wallet.main_balance || 0) +
+      (wallet.wallet.roi_balance || 0) +
+      (wallet.wallet.earning_balance || 0) +
+      (wallet.wallet.p2p_balance || 0);
 
     return { success: true, total, wallet: wallet.wallet };
   } catch (error: unknown) {
     console.error("Get total balance error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Failed to get balance" };
+  }
+}
+
+// Request withdrawal (external - subject to 50% tax)
+export async function requestWithdrawal(data: {
+  amount: number;
+  walletAddress: string;
+  fromWallet: "main_balance" | "roi_balance" | "earning_balance" | "p2p_balance";
+}) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    // Get wallet
+    const wallet = await getUserWallet(user.id);
+    if (!wallet.success || !wallet.wallet) {
+      return { success: false, error: "Wallet not found" };
+    }
+
+    // Check sufficient balance
+    const balance = wallet.wallet[data.fromWallet] || 0;
+    if (balance < data.amount) {
+      return { success: false, error: "Insufficient balance" };
+    }
+
+    // Calculate 50% withdrawal tax for external withdrawals
+    const withdrawalTax = data.amount * 0.50;
+    const netAmount = data.amount - withdrawalTax;
+
+    // Deduct from wallet (will be held until admin approval)
+    await supabase
+      .from("wallets")
+      .update({ 
+        [data.fromWallet]: supabase.raw(`${data.fromWallet} - ${data.amount}`),
+        locked_balance: supabase.raw(`locked_balance + ${data.amount}`)
+      })
+      .eq("user_id", user.id);
+
+    // Create withdrawal transaction (pending admin approval)
+    const { data: transaction, error: txError } = await supabase
+      .from("transactions")
+      .insert({
+        user_id: user.id,
+        type: "withdrawal",
+        wallet_type: data.fromWallet.replace("_balance", "") as "main" | "roi" | "earning" | "p2p",
+        amount: data.amount,
+        fee: withdrawalTax,
+        net_amount: netAmount,
+        wallet_address: data.walletAddress,
+        status: "pending",
+        admin_note: "Withdrawal request - 50% external tax applies",
+      })
+      .select()
+      .single();
+
+    if (txError) return { success: false, error: txError.message };
+
+    return { 
+      success: true, 
+      transaction,
+      netAmount,
+      tax: withdrawalTax 
+    };
+  } catch (error: unknown) {
+    console.error("Request withdrawal error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Withdrawal request failed" };
+  }
+}
+
+// Request deposit
+export async function requestDeposit(data: {
+  amount: number;
+  hashKey: string;
+  walletAddress: string;
+}) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    // Create deposit transaction (pending admin approval)
+    const { data: transaction, error: txError } = await supabase
+      .from("transactions")
+      .insert({
+        user_id: user.id,
+        type: "deposit",
+        wallet_type: "main",
+        amount: data.amount,
+        net_amount: data.amount,
+        hash_key: data.hashKey,
+        wallet_address: data.walletAddress,
+        status: "pending",
+        admin_note: "Deposit request - awaiting admin verification",
+      })
+      .select()
+      .single();
+
+    if (txError) return { success: false, error: txError.message };
+
+    return { success: true, transaction };
+  } catch (error: unknown) {
+    console.error("Request deposit error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Deposit request failed" };
   }
 }

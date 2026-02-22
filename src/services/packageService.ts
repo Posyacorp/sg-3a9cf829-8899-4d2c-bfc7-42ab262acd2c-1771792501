@@ -14,8 +14,8 @@ export async function getAllPackages() {
     const { data, error } = await supabase
       .from("packages")
       .select("*")
-      .eq("status", "active")
-      .order("amount", { ascending: true });
+      .eq("is_active", true)
+      .order("min_deposit", { ascending: true });
 
     if (error) return { success: false, error: error.message };
 
@@ -44,7 +44,7 @@ export async function getPackageById(packageId: string) {
   }
 }
 
-// Purchase package
+// Purchase package with 70/30 rule
 export async function purchasePackage(data: {
   packageId: string;
   useInternalFunds: number; // Amount from internal wallets (max 70%)
@@ -63,7 +63,7 @@ export async function purchasePackage(data: {
 
     // Validate 70/30 rule
     const totalAmount = data.useInternalFunds + data.freshDeposit;
-    if (totalAmount < pkg.amount) {
+    if (totalAmount < pkg.min_deposit) {
       return { success: false, error: "Insufficient funds" };
     }
 
@@ -78,8 +78,8 @@ export async function purchasePackage(data: {
     }
 
     // Deduct 5% admin fee
-    const adminFee = pkg.amount * 0.05;
-    const netAmount = pkg.amount - adminFee;
+    const adminFee = totalAmount * 0.05;
+    const netAmount = totalAmount - adminFee;
 
     // Calculate next task time (3 hours from now)
     const nextTaskTime = new Date(Date.now() + 3 * 60 * 60 * 1000);
@@ -90,25 +90,36 @@ export async function purchasePackage(data: {
       .insert({
         user_id: user.id,
         package_id: data.packageId,
-        amount_paid: pkg.amount,
-        roi_percentage: pkg.roi_percentage,
-        total_return: (pkg.amount * pkg.roi_percentage) / 100,
-        amount_withdrawn: 0,
+        deposit_amount: totalAmount,
+        max_roi_percentage: pkg.max_roi_percentage,
         next_task_time: nextTaskTime.toISOString(),
-        status: "active",
+        is_active: true,
       })
       .select()
       .single();
 
     if (packageError) return { success: false, error: packageError.message };
 
-    // Record admin fee transaction (goes to secret admin wallet)
+    // Record admin fee transaction
     await supabase.from("transactions").insert({
       user_id: user.id,
       type: "admin_fee",
+      wallet_type: "main",
       amount: adminFee,
+      net_amount: 0,
       status: "completed",
-      description: `Admin fee for package purchase (${pkg.name})`,
+      admin_note: `5% admin fee for package purchase (${pkg.name})`,
+    });
+
+    // Record package purchase transaction
+    await supabase.from("transactions").insert({
+      user_id: user.id,
+      type: "package_purchase",
+      wallet_type: "main",
+      amount: totalAmount,
+      net_amount: netAmount,
+      package_id: data.packageId,
+      status: "completed",
     });
 
     return { success: true, userPackage };
@@ -128,8 +139,8 @@ export async function getUserActivePackages(userId: string) {
         packages (*)
       `)
       .eq("user_id", userId)
-      .eq("status", "active")
-      .order("created_at", { ascending: false });
+      .eq("is_active", true)
+      .order("purchased_at", { ascending: false });
 
     if (error) return { success: false, error: error.message };
 
@@ -150,7 +161,7 @@ export async function getUserPackageHistory(userId: string) {
         packages (*)
       `)
       .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+      .order("purchased_at", { ascending: false });
 
     if (error) return { success: false, error: error.message };
 
@@ -166,14 +177,14 @@ export async function canClaimTask(userPackageId: string) {
   try {
     const { data, error } = await supabase
       .from("user_packages")
-      .select("next_task_time, last_claim_time")
+      .select("next_task_time, last_task_time")
       .eq("id", userPackageId)
       .single();
 
     if (error) return { success: false, error: error.message };
 
     const now = new Date();
-    const nextTask = new Date(data.next_task_time);
+    const nextTask = new Date(data.next_task_time || Date.now());
     const windowStart = nextTask;
     const windowEnd = new Date(nextTask.getTime() + 30 * 60 * 1000); // 30 minutes
 
@@ -215,54 +226,64 @@ export async function claimTaskReward(userPackageId: string) {
     // Calculate random reward (max 10% daily / max 3.33% per 3-hour interval)
     const maxRewardPercent = 3.33; // 10% daily / 3 intervals
     const randomPercent = Math.random() * maxRewardPercent;
-    const rewardAmount = (userPackage.amount_paid * randomPercent) / 100;
+    const rewardAmount = (userPackage.deposit_amount * randomPercent) / 100;
 
     // Update user package
-    const newAmountWithdrawn = userPackage.amount_withdrawn + rewardAmount;
+    const newRoiEarned = (userPackage.current_roi_earned || 0) + rewardAmount;
+    const newRoiPercentage = (newRoiEarned / userPackage.deposit_amount) * 100;
     const newNextTaskTime = new Date(Date.now() + 3 * 60 * 60 * 1000); // Next 3 hours
 
     // Check if package is complete
-    const isComplete = newAmountWithdrawn >= userPackage.total_return;
+    const isComplete = newRoiPercentage >= userPackage.max_roi_percentage;
 
     const { error: updateError } = await supabase
       .from("user_packages")
       .update({
-        amount_withdrawn: newAmountWithdrawn,
-        last_claim_time: new Date().toISOString(),
+        current_roi_earned: newRoiEarned,
+        total_roi_percentage: newRoiPercentage,
+        last_task_time: new Date().toISOString(),
         next_task_time: isComplete ? null : newNextTaskTime.toISOString(),
-        status: isComplete ? "completed" : "active",
+        is_active: !isComplete,
+        is_completed: isComplete,
+        completed_at: isComplete ? new Date().toISOString() : null,
+        tasks_completed: (userPackage.tasks_completed || 0) + 1,
       })
       .eq("id", userPackageId);
 
     if (updateError) return { success: false, error: updateError.message };
 
-    // Credit ROI wallet
-    const { error: walletError } = await supabase.rpc("credit_wallet", {
-      p_user_id: user.id,
-      p_wallet_type: "roi_balance",
-      p_amount: rewardAmount,
-    });
+    // Credit ROI wallet using SQL UPDATE
+    await supabase
+      .from("wallets")
+      .update({ 
+        roi_balance: supabase.raw(`roi_balance + ${rewardAmount}`) 
+      })
+      .eq("user_id", user.id);
 
-    if (walletError) return { success: false, error: walletError.message };
-
-    // Record transaction
+    // Record ROI claim transaction
     await supabase.from("transactions").insert({
       user_id: user.id,
-      type: "roi_reward",
+      type: "roi_claim",
+      wallet_type: "roi",
       amount: rewardAmount,
+      net_amount: rewardAmount,
+      package_id: userPackage.package_id,
       status: "completed",
-      description: `Task reward claimed (${randomPercent.toFixed(2)}%)`,
+      admin_note: `Task reward claimed (${randomPercent.toFixed(2)}%)`,
     });
 
     // Create task record
+    const taskNumber = (userPackage.tasks_completed || 0) + 1;
     await supabase.from("tasks").insert({
       user_package_id: userPackageId,
       user_id: user.id,
-      reward_amount: rewardAmount,
-      reward_percentage: randomPercent,
+      task_number: taskNumber,
+      roi_percentage: randomPercent,
+      roi_amount: rewardAmount,
       status: "claimed",
-      window_start: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      window_start: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
       window_end: new Date().toISOString(),
+      claimed_at: new Date().toISOString(),
     });
 
     return { 
