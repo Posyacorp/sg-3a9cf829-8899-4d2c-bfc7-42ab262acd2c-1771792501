@@ -1,6 +1,7 @@
 import { SEO } from "@/components/SEO";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { 
   TrendingUp, Wallet, Clock, Users, Gift, ArrowUpRight, 
   ArrowDownRight, Copy, CheckCircle, AlertCircle, DollarSign, ArrowLeftRight 
@@ -9,6 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { walletService } from "@/services/walletService";
+import { packageService } from "@/services/packageService";
+import { supabase } from "@/integrations/supabase/client";
+import { authService } from "@/services/authService";
 
 interface WalletBalance {
   main: number;
@@ -39,49 +44,31 @@ interface Transaction {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [wallets, setWallets] = useState<WalletBalance>({
-    main: 150.5,
-    roi: 45.8,
-    earning: 23.2,
-    p2p: 12.0
+    main: 0,
+    roi: 0,
+    earning: 0,
+    p2p: 0
   });
 
-  const [activePackages, setActivePackages] = useState<ActivePackage[]>([
-    {
-      id: "1",
-      name: "Bronze",
-      deposit: 100,
-      maxRoi: 230,
-      currentRoi: 45.8,
-      purchased: Date.now() - 1000 * 60 * 60 * 24 * 3,
-      lastClaim: Date.now() - 1000 * 60 * 60 * 2,
-      nextClaim: Date.now() + 1000 * 60 * 60,
-      status: "active"
-    }
-  ]);
+  const [activePackages, setActivePackages] = useState<ActivePackage[]>([]);
 
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    {
-      id: "1",
-      type: "deposit",
-      amount: 100,
-      status: "completed",
-      timestamp: Date.now() - 1000 * 60 * 60 * 24 * 3,
-      hash: "0x1234...5678"
-    },
-    {
-      id: "2",
-      type: "roi",
-      amount: 5.2,
-      status: "completed",
-      timestamp: Date.now() - 1000 * 60 * 60 * 3
-    }
-  ]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [canClaim, setCanClaim] = useState(false);
-  const [referralLink] = useState("https://sui24.trade/?ref=USER123");
+  const [referralLink, setReferralLink] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const [stats, setStats] = useState({
+    totalBalance: 0,
+    activePackages: 0,
+    totalEarnings: 0,
+    teamSize: 0
+  });
+  
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -95,6 +82,84 @@ export default function Dashboard() {
 
     return () => clearInterval(interval);
   }, [activePackages]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const handleLogout = async () => {
+    const { error } = await authService.signOut();
+    if (error) {
+      alert(error.message);
+    } else {
+      router.push("/login");
+    }
+  };
+
+  const fetchDashboardData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 1. Get Wallet Balances
+    const walletRes = await walletService.getUserWallet(user.id);
+    let totalBalance = 0;
+    if (walletRes.success && walletRes.wallet) {
+      totalBalance = 
+        (walletRes.wallet.main_balance || 0) + 
+        (walletRes.wallet.roi_balance || 0) + 
+        (walletRes.wallet.earning_balance || 0) + 
+        (walletRes.wallet.p2p_balance || 0);
+    }
+
+    // 2. Get Active Packages
+    const packagesRes = await packageService.getUserActivePackages(user.id);
+    const activePackages = packagesRes.success && packagesRes.packages ? packagesRes.packages.length : 0;
+
+    // 3. Get Total Earnings (ROI + Commissions)
+    const { data: earnings } = await supabase
+      .from("transactions")
+      .select("amount")
+      .eq("user_id", user.id)
+      .in("type", ["roi_claim", "commission"]);
+    
+    const totalEarnings = earnings?.reduce((sum, tx) => sum + Number(tx.amount), 0) || 0;
+
+    // 4. Get Team Size (Direct Referrals for now, recursive count would be better for full tree)
+    const { count, data: profile } = await supabase
+      .from("profiles")
+      .select("referral_code", { count: 'exact', head: true })
+      .eq("referred_by", user.id); // This assumes we store referrer ID
+
+    // Fetch user profile for referral code
+    const { data: userProfile } = await supabase
+      .from("profiles")
+      .select("referral_code")
+      .eq("id", user.id)
+      .single();
+      
+    if (userProfile?.referral_code) {
+      setReferralLink(`${window.location.origin}/signup?ref=${userProfile.referral_code}`);
+    }
+
+    setStats({
+      totalBalance,
+      activePackages,
+      totalEarnings,
+      teamSize: count || 0
+    });
+
+    // 5. Get Recent Activity
+    const { data: activity } = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (activity) {
+      setRecentActivity(activity);
+    }
+  };
 
   const claimReward = () => {
     if (!canClaim) return;
@@ -170,9 +235,10 @@ export default function Dashboard() {
                 <Link href="/trade" className="text-gray-300 hover:text-white transition-colors">Trade</Link>
                 <Link href="/packages" className="text-gray-300 hover:text-white transition-colors">Packages</Link>
                 <Link href="/dashboard" className="text-white font-semibold">Dashboard</Link>
+                <Link href="/profile" className="text-gray-300 hover:text-white transition-colors">Profile</Link>
               </nav>
 
-              <Button variant="outline" className="border-red-500/50 text-red-300 hover:bg-red-500/10">
+              <Button variant="outline" className="border-red-500/50 text-red-300 hover:bg-red-500/10" onClick={handleLogout}>
                 Logout
               </Button>
             </div>

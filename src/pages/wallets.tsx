@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { walletService } from "@/services/walletService";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect } from "react";
 
 interface WalletBalance {
   main: number;
@@ -38,13 +41,7 @@ export default function WalletsPage() {
     p2p: 0,
   });
 
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    { id: "1", type: "Deposit", amount: 100, wallet: "Main", status: "Completed", timestamp: Date.now() - 86400000 * 2, hash: "0x1234...5678" },
-    { id: "2", type: "ROI Claim", amount: 8.5, wallet: "ROI", status: "Completed", timestamp: Date.now() - 86400000, hash: "0xabcd...efgh" },
-    { id: "3", type: "Commission", amount: 12.3, wallet: "Earning", status: "Completed", timestamp: Date.now() - 86400000, hash: "0x9876...5432" },
-    { id: "4", type: "P2P Transfer", amount: 50, wallet: "P2P", status: "Completed", timestamp: Date.now(), hash: "0xijkl...mnop" },
-    { id: "5", type: "Withdrawal", amount: 75, wallet: "Main", status: "Pending", timestamp: Date.now(), hash: "Pending..." },
-  ]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   const [activeTab, setActiveTab] = useState("overview");
   const [depositAmount, setDepositAmount] = useState("");
@@ -55,6 +52,47 @@ export default function WalletsPage() {
   const [p2pAmount, setP2pAmount] = useState("");
   const [depositAddress] = useState("0xf57c83c39866238fe4860ef426426d170c3b6f6b");
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetchWalletData();
+  }, []);
+
+  const fetchWalletData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Fetch wallet balances
+    const walletRes = await walletService.getUserWallet(user.id);
+    if (walletRes.success && walletRes.wallet) {
+      setWallets({
+        main: walletRes.wallet.main_balance || 0,
+        roi: walletRes.wallet.roi_balance || 0,
+        earning: walletRes.wallet.earning_balance || 0,
+        p2p: walletRes.wallet.p2p_balance || 0,
+      });
+    }
+
+    // Fetch transactions
+    const { data: txs, error } = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (!error && txs) {
+      const formattedTxs: Transaction[] = txs.map(tx => ({
+        id: tx.id,
+        type: tx.type,
+        amount: tx.amount,
+        wallet: tx.wallet_type,
+        status: tx.status,
+        timestamp: new Date(tx.created_at).getTime(),
+        hash: tx.hash_key,
+        fee: tx.fee
+      }));
+      setTransactions(formattedTxs);
+    }
+  };
 
   const copyAddress = () => {
     navigator.clipboard.writeText(depositAddress);

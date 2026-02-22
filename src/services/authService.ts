@@ -52,13 +52,17 @@ export const authService = {
   },
 
   // Sign up with email and password
-  async signUp(email: string, password: string): Promise<{ user: AuthUser | null; error: AuthError | null }> {
+  async signUp(email: string, password: string, referralCode?: string, metadata?: any): Promise<{ user: AuthUser | null; error: AuthError | null }> {
     try {
+      // Generate referral code if not provided
+      const code = referralCode || `SUI${Math.floor(100000 + Math.random() * 900000)}`;
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${getURL()}auth/confirm-email`
+          emailRedirectTo: `${getURL()}auth/confirm-email`,
+          data: { ...metadata, referral_code: code }
         }
       });
 
@@ -72,6 +76,34 @@ export const authService = {
         user_metadata: data.user.user_metadata,
         created_at: data.user.created_at
       } : null;
+
+      if (data.user) {
+        // Create profile entry if it doesn't exist (handling potential triggers)
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: data.user.id,
+            email: email,
+            referral_code: code, // Use the generated/passed code
+            role: 'user',
+            status: 'active'
+          }, { onConflict: 'id' });
+
+        // CRITICAL: Create users table entry as it is referenced by wallets/transactions
+        const { error: userError } = await supabase
+          .from('users')
+          .upsert({
+            id: data.user.id,
+            email: email,
+            referral_code: code, // Sync referral code
+            account_status: 'active',
+            // referred_by needs to be handled if we have the ID, but here we might only have code
+            // The metadata trigger might handle this, but being safe:
+          }, { onConflict: 'id' });
+          
+        if (profileError) console.error("Profile creation error:", profileError);
+        if (userError) console.error("User creation error:", userError);
+      }
 
       return { user: authUser, error: null };
     } catch (error) {

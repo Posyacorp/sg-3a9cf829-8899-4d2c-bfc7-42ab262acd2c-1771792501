@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authService } from "@/services/authService";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Signup() {
   const router = useRouter();
@@ -38,12 +40,51 @@ export default function Signup() {
       return;
     }
 
+    if (!formData.referralCode) {
+      alert("Referral code is mandatory. You cannot join without an inviter.");
+      return;
+    }
+
     setIsLoading(true);
-    
-    // Simulate signup
-    setTimeout(() => {
-      window.location.href = "/dashboard";
-    }, 1000);
+
+    try {
+      // 1. Validate Referral Code
+      const { data: referrer, error: refError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("referral_code", formData.referralCode)
+        .single();
+
+      if (refError || !referrer) {
+        alert("Invalid referral code. Please check and try again.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Sign up with Supabase Auth
+      const { user, error } = await authService.signUp(
+        formData.email, 
+        formData.password, 
+        formData.referralCode, // Pass the referral code
+        {
+          full_name: formData.username,
+          referral_code: formData.referralCode,
+          referred_by: referrer.id
+        }
+      );
+
+      if (error) {
+        alert(error.message);
+      } else {
+        alert("Signup successful! Please check your email to confirm your account.");
+        router.push("/login");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("An unexpected error occurred.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const copyReferralLink = () => {

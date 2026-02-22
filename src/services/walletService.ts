@@ -193,7 +193,7 @@ export const walletService = {
     }
   },
 
-  // P2P Transfer (Combined robust implementation)
+  // P2P Transfer
   async p2pTransfer(
     fromUserId: string,
     toUsername: string,
@@ -251,12 +251,9 @@ export const walletService = {
         return { success: false, message: "Failed to deduct balance" };
       }
 
-      // Add to recipient (Always credits to P2P wallet for transfers?) 
-      // Assuming P2P transfers go to P2P wallet of receiver usually, or same type? 
-      // Let's stick to P2P wallet for receiving as per typical MLM structure or earning. 
-      // The previous code credited 'p2p' wallet. I'll stick to that.
+      // Add to recipient - credit to P2P wallet
       const { error: addError } = await supabase.rpc("credit_wallet", {
-        p_user_id: recipient.id,  // Fixed param name based on other RPC usage
+        p_user_id: recipient.id,
         p_wallet_type: "p2p_balance",
         p_amount: transferAmount,
       });
@@ -276,7 +273,7 @@ export const walletService = {
       // Record P2P fee transaction
       await supabase.from("transactions").insert({
         user_id: fromUserId,
-        type: "p2p_fee",
+        type: "admin_fee", // Used admin_fee instead of p2p_fee to match constraint
         amount: p2pFee,
         net_amount: 0,
         wallet_type: "main",
@@ -289,7 +286,7 @@ export const walletService = {
       await supabase.from("transactions").insert([
         {
           user_id: fromUserId,
-          type: "p2p_transfer_sent",
+          type: "p2p_send", // Used p2p_send to match constraint
           amount: amount,
           net_amount: transferAmount,
           fee: p2pFee,
@@ -300,7 +297,7 @@ export const walletService = {
         {
           user_id: recipient.id,
           from_user_id: fromUserId,
-          type: "p2p_transfer_received",
+          type: "p2p_receive", // Used p2p_receive to match constraint
           amount: transferAmount,
           net_amount: transferAmount,
           wallet_type: "p2p",

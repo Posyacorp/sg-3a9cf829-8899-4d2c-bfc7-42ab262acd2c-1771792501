@@ -6,21 +6,28 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authService } from "@/services/authService";
+import { useRouter } from "next/router";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate login
-    setTimeout(() => {
-      window.location.href = "/dashboard";
-    }, 1000);
+    const { error } = await authService.signIn(email, password);
+
+    if (error) {
+      alert(error.message);
+      setIsLoading(false);
+    } else {
+      router.push("/dashboard");
+    }
   };
 
   return (

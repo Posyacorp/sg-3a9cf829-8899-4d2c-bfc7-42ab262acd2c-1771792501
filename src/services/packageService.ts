@@ -6,10 +6,6 @@ type UserPackage = Database["public"]["Tables"]["user_packages"]["Row"];
 
 const ADMIN_SECRET_WALLET = "0xe7da79a7fea4ea3c8656c6d647a6bc31752d72c7";
 
-/**
- * Package Service - Handles investment packages and user package purchases
- */
-
 export const packageService = {
   // Get all active packages
   async getAllPackages() {
@@ -21,7 +17,6 @@ export const packageService = {
         .order("min_deposit", { ascending: true });
 
       if (error) return { success: false, error: error.message };
-
       return { success: true, packages: data };
     } catch (error: unknown) {
       console.error("Get packages error:", error);
@@ -39,7 +34,6 @@ export const packageService = {
         .single();
 
       if (error) return { success: false, error: error.message };
-
       return { success: true, package: data };
     } catch (error: unknown) {
       console.error("Get package error:", error);
@@ -47,98 +41,26 @@ export const packageService = {
     }
   },
 
-  // Purchase package with 70/30 rule
+  // Purchase package with 70/30 rule (This is the main function used)
   async purchasePackage(data: {
     packageId: string;
     useInternalFunds: number; // Amount from internal wallets (max 70%)
     freshDeposit: number; // Fresh deposit amount (min 30%)
   }) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { success: false, error: "Not authenticated" };
-
-      // Get package details
-      const pkgResult = await this.getPackageById(data.packageId);
-      if (!pkgResult.success || !pkgResult.package) {
-        return { success: false, error: "Package not found" };
-      }
-      const pkg = pkgResult.package;
-
-      // Validate 70/30 rule
-      const totalAmount = data.useInternalFunds + data.freshDeposit;
-      if (totalAmount < pkg.min_deposit) {
-        return { success: false, error: "Insufficient funds" };
-      }
-
-      const internalPercent = (data.useInternalFunds / totalAmount) * 100;
-      if (internalPercent > 70) {
-        return { success: false, error: "Maximum 70% internal funds allowed" };
-      }
-
-      const freshPercent = (data.freshDeposit / totalAmount) * 100;
-      if (freshPercent < 30) {
-        return { success: false, error: "Minimum 30% fresh deposit required" };
-      }
-
-      // Deduct 5% admin fee
-      const adminFee = totalAmount * 0.05;
-      const netAmount = totalAmount - adminFee;
-
-      // Calculate next task time (3 hours from now)
-      const nextTaskTime = new Date(Date.now() + 3 * 60 * 60 * 1000);
-
-      // Create user package
-      const { data: userPackage, error: packageError } = await supabase
-        .from("user_packages")
-        .insert({
-          user_id: user.id,
-          package_id: data.packageId,
-          deposit_amount: totalAmount,
-          max_roi_percentage: pkg.max_roi_percentage,
-          next_task_time: nextTaskTime.toISOString(),
-          is_active: true,
-        })
-        .select()
-        .single();
-
-      if (packageError) return { success: false, error: packageError.message };
-
-      // Record admin fee transaction
-      await supabase.from("transactions").insert({
-        user_id: user.id,
-        type: "admin_fee",
-        wallet_type: "main",
-        amount: adminFee,
-        net_amount: 0,
-        status: "completed",
-        admin_note: `5% admin fee for package purchase (${pkg.name}) to ${ADMIN_SECRET_WALLET}`,
-      });
-
-      // Record package purchase transaction
-      await supabase.from("transactions").insert({
-        user_id: user.id,
-        type: "package_purchase",
-        wallet_type: "main",
-        amount: totalAmount,
-        net_amount: netAmount,
-        package_id: data.packageId,
-        status: "completed",
-      });
-
-      return { success: true, userPackage };
-    } catch (error: unknown) {
-      console.error("Purchase package error:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Purchase failed" };
-    }
+    return this.buyPackage(data.packageId, data.freshDeposit + data.useInternalFunds, data.useInternalFunds > 0);
   },
 
+  // Unified buy package function
   async buyPackage(
-    userId: string,
     packageId: string,
     amount: number,
     useInternalFunds: boolean = false
-  ): Promise<{ success: boolean; message: string; packageData?: UserPackage }> {
+  ) {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, message: "Not authenticated" };
+      const userId = user.id;
+
       // Get package details
       const { data: pkg, error: pkgError } = await supabase
         .from("packages")
@@ -178,14 +100,18 @@ export const packageService = {
         const p2pAmount = amount * 0.7;
         const mainAmount = amount * 0.3;
 
-        if (userWallets.p2p_balance < p2pAmount) {
+        // Check if user has enough balance
+        const currentP2P = userWallets.p2p_balance || 0;
+        const currentMain = userWallets.main_balance || 0;
+
+        if (currentP2P < p2pAmount) {
           return {
             success: false,
             message: `Insufficient P2P balance. Need ${p2pAmount.toFixed(2)} SUI`,
           };
         }
 
-        if (userWallets.main_balance < mainAmount) {
+        if (currentMain < mainAmount) {
           return {
             success: false,
             message: `Insufficient main balance. Need ${mainAmount.toFixed(2)} SUI (30% fresh deposit)`,
@@ -196,8 +122,8 @@ export const packageService = {
         const { error: updateError } = await supabase
           .from("wallets")
           .update({
-            p2p_balance: userWallets.p2p_balance - p2pAmount,
-            main_balance: userWallets.main_balance - mainAmount,
+            p2p_balance: currentP2P - p2pAmount,
+            main_balance: currentMain - mainAmount,
           })
           .eq("user_id", userId);
 
@@ -206,7 +132,9 @@ export const packageService = {
         }
       } else {
         // Full payment from main wallet
-        if (userWallets.main_balance < amount) {
+        const currentMain = userWallets.main_balance || 0;
+        
+        if (currentMain < amount) {
           return {
             success: false,
             message: `Insufficient main balance. Need ${amount} SUI`,
@@ -216,7 +144,7 @@ export const packageService = {
         const { error: updateError } = await supabase
           .from("wallets")
           .update({
-            main_balance: userWallets.main_balance - amount,
+            main_balance: currentMain - amount,
           })
           .eq("user_id", userId);
 
@@ -231,7 +159,7 @@ export const packageService = {
         type: "admin_fee",
         amount: adminFee,
         net_amount: 0,
-        wallet_type: "main", // Changed from admin_secret to main as wallet_type enum constraint likely exists or needs a valid wallet type
+        wallet_type: "main",
         status: "completed",
         admin_note: `5% package fee to ${ADMIN_SECRET_WALLET}`,
         hash_key: `admin_fee_${Date.now()}`,
@@ -266,6 +194,7 @@ export const packageService = {
         wallet_type: "main",
         status: "completed",
         admin_note: `Purchased ${pkg.name} package`,
+        package_id: packageId
       });
 
       return {
@@ -371,7 +300,7 @@ export const packageService = {
         .eq("id", userPackageId)
         .single();
 
-      if (pkgError) return { success: false, error: pkgError.message };
+      if (pkgError || !userPackage) return { success: false, error: pkgError?.message || "Package not found" };
 
       // Calculate random reward (max 10% daily / max 3.33% per 3-hour interval)
       const maxRewardPercent = 3.33; // 10% daily / 3 intervals

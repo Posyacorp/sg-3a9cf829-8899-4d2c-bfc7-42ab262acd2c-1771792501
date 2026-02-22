@@ -1,99 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Database } from "@/integrations/supabase/types";
 
-export type User = Tables<"users">;
+export type Profile = Database['public']['Tables']['profiles']['Row'];
 
 /**
- * User Service - Handles user registration, authentication, and profile management
+ * User Service - Handles user profile management using the 'profiles' table
  */
 
-// Register new user with referral code
-export async function registerUser(data: {
-  email: string;
-  password: string;
-  full_name: string;
-  referral_code?: string;
-}) {
-  try {
-    // Check if referral code exists
-    let referrer_id = null;
-    if (data.referral_code) {
-      const { data: referrer } = await supabase
-        .from("users")
-        .select("id")
-        .eq("referral_code", data.referral_code)
-        .single();
-      
-      if (!referrer) {
-        return { success: false, error: "Invalid referral code" };
-      }
-      referrer_id = referrer.id;
-    }
-
-    // Create auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: data.email,
-      password: data.password,
-    });
-
-    if (authError) return { success: false, error: authError.message };
-    if (!authData.user) return { success: false, error: "Registration failed" };
-
-    // Generate unique referral code
-    const referralCode = `SUI${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-    // Create user profile
-    const { error: profileError } = await supabase
-      .from("users")
-      .insert({
-        id: authData.user.id,
-        email: data.email,
-        full_name: data.full_name,
-        referral_code: referralCode,
-        referred_by: referrer_id,
-      });
-
-    if (profileError) return { success: false, error: profileError.message };
-
-    return { 
-      success: true, 
-      user: authData.user,
-      referral_code: referralCode 
-    };
-  } catch (error: unknown) {
-    console.error("Registration error:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Registration failed" };
-  }
-}
-
-// Login user
-export async function loginUser(email: string, password: string) {
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) return { success: false, error: error.message };
-
-    return { success: true, user: data.user, session: data.session };
-  } catch (error: unknown) {
-    console.error("Login error:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Login failed" };
-  }
-}
-
-// Logout user
-export async function logoutUser() {
-  try {
-    const { error } = await supabase.auth.signOut();
-    if (error) return { success: false, error: error.message };
-    return { success: true };
-  } catch (error: unknown) {
-    console.error("Logout error:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Logout failed" };
-  }
-}
+// Register new user (Handled by authService usually, but keeping for reference/admin)
+// Note: authService.signUp handles profile creation via triggers or direct insert
 
 // Get current user profile
 export async function getCurrentUser() {
@@ -102,7 +17,7 @@ export async function getCurrentUser() {
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { data, error } = await supabase
-      .from("users")
+      .from("profiles")
       .select("*")
       .eq("id", user.id)
       .single();
@@ -117,13 +32,13 @@ export async function getCurrentUser() {
 }
 
 // Update user profile
-export async function updateUserProfile(updates: Partial<User>) {
+export async function updateUserProfile(updates: Partial<Profile>) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { data, error } = await supabase
-      .from("users")
+      .from("profiles")
       .update(updates)
       .eq("id", user.id)
       .select()
@@ -142,7 +57,7 @@ export async function updateUserProfile(updates: Partial<User>) {
 export async function getUserByReferralCode(referralCode: string) {
   try {
     const { data, error } = await supabase
-      .from("users")
+      .from("profiles")
       .select("id, full_name, email, referral_code")
       .eq("referral_code", referralCode)
       .single();
@@ -160,7 +75,7 @@ export async function getUserByReferralCode(referralCode: string) {
 export async function getUserDownlineCount(userId: string) {
   try {
     const { count, error } = await supabase
-      .from("users")
+      .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("referred_by", userId);
 
@@ -173,7 +88,7 @@ export async function getUserDownlineCount(userId: string) {
   }
 }
 
-// Check if user has active package (for MLM commission eligibility)
+// Check if user has active package
 export async function hasActivePackage(userId: string) {
   try {
     const { count, error } = await supabase

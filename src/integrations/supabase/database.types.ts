@@ -443,6 +443,7 @@ export type Database = {
           two_factor_enabled: boolean | null
           two_factor_secret: string | null
           updated_at: string | null
+          username: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -468,6 +469,7 @@ export type Database = {
           two_factor_enabled?: boolean | null
           two_factor_secret?: string | null
           updated_at?: string | null
+          username?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -493,6 +495,7 @@ export type Database = {
           two_factor_enabled?: boolean | null
           two_factor_secret?: string | null
           updated_at?: string | null
+          username?: string | null
         }
         Relationships: [
           {
