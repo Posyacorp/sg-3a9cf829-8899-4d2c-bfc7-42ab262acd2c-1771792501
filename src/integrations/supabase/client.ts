@@ -9,13 +9,27 @@ const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 // Validate environment variables
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   if (typeof window !== 'undefined') {
-    console.error('Missing Supabase environment variables. Please add them to your .env.local file or Vercel environment variables.');
+    console.error('❌ Missing Supabase environment variables');
+    console.error('NEXT_PUBLIC_SUPABASE_URL:', SUPABASE_URL ? '✅ Set' : '❌ Missing');
+    console.error('NEXT_PUBLIC_SUPABASE_ANON_KEY:', SUPABASE_PUBLISHABLE_KEY ? '✅ Set' : '❌ Missing');
   }
+}
+
+// Validate URL format
+if (SUPABASE_URL && !SUPABASE_URL.startsWith('https://')) {
+  console.error('❌ Invalid Supabase URL format. Should start with https://');
 }
 
 // Create a safe fallback for build time
 const supabaseUrl = SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseKey = SUPABASE_PUBLISHABLE_KEY || 'placeholder-key';
+
+// Log connection attempt (client-side only)
+if (typeof window !== 'undefined') {
+  console.log('🔌 Initializing Supabase client...');
+  console.log('URL:', supabaseUrl);
+  console.log('Key:', supabaseKey ? '✅ Present' : '❌ Missing');
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -24,5 +38,27 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-  }
+    detectSessionInUrl: true,
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'sui24-web-app',
+    },
+  },
 });
+
+// Test connection on client-side
+if (typeof window !== 'undefined') {
+  supabase.auth.getSession()
+    .then(({ data, error }) => {
+      if (error) {
+        console.error('❌ Supabase connection test failed:', error);
+      } else {
+        console.log('✅ Supabase connected successfully');
+        console.log('Session:', data.session ? 'Active' : 'None');
+      }
+    })
+    .catch((error) => {
+      console.error('❌ Supabase connection error:', error);
+    });
+}

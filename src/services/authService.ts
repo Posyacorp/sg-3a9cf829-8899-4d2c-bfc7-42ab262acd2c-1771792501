@@ -20,36 +20,68 @@ const getURL = () => {
            process?.env?.NEXT_PUBLIC_SITE_URL ?? 
            'http://localhost:3000'
   
-  // Handle undefined or null url
   if (!url) {
     url = 'http://localhost:3000';
   }
   
-  // Ensure url has protocol
   url = url.startsWith('http') ? url : `https://${url}`
-  
-  // Ensure url ends with slash
   url = url.endsWith('/') ? url : `${url}/`
   
   return url
 }
 
+// Network diagnostic helper
+const diagnoseNetworkError = (error: any): string => {
+  if (error.message?.includes('fetch')) {
+    return "Network error: Unable to connect to authentication server. Please check your internet connection.";
+  }
+  if (error.message?.includes('CORS')) {
+    return "CORS error: Authentication server configuration issue.";
+  }
+  if (error.message?.includes('timeout')) {
+    return "Request timeout: Authentication server took too long to respond.";
+  }
+  return error.message || "An unexpected error occurred";
+};
+
 export const authService = {
   // Get current user
   async getCurrentUser(): Promise<AuthUser | null> {
-    const { data: { user } } = await supabase.auth.getUser();
-    return user ? {
-      id: user.id,
-      email: user.email || "",
-      user_metadata: user.user_metadata,
-      created_at: user.created_at
-    } : null;
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.error("Get user error:", error);
+        return null;
+      }
+      
+      return user ? {
+        id: user.id,
+        email: user.email || "",
+        user_metadata: user.user_metadata,
+        created_at: user.created_at
+      } : null;
+    } catch (error) {
+      console.error("Get current user error:", error);
+      return null;
+    }
   },
 
   // Get current session
   async getCurrentSession(): Promise<Session | null> {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session;
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error("Get session error:", error);
+        return null;
+      }
+      
+      return session;
+    } catch (error) {
+      console.error("Get current session error:", error);
+      return null;
+    }
   },
 
   // Sign up with email and password
@@ -116,16 +148,33 @@ export const authService = {
     }
   },
 
-  // Sign in with email and password
-  async signIn(email: string, password: string): Promise<{ user: AuthUser | null; error: AuthError | null }> {
+  // Sign in with email and password - with retry logic
+  async signIn(email: string, password: string, retries = 2): Promise<{ user: AuthUser | null; error: AuthError | null }> {
     try {
+      console.log("Attempting login for:", email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        return { user: null, error: { message: error.message, code: error.status?.toString() } };
+        console.error("Login error from Supabase:", error);
+        
+        // Retry on network errors
+        if (retries > 0 && error.message?.toLowerCase().includes('fetch')) {
+          console.log(`Retrying login... (${retries} attempts remaining)`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          return this.signIn(email, password, retries - 1);
+        }
+        
+        return { 
+          user: null, 
+          error: { 
+            message: diagnoseNetworkError(error),
+            code: error.status?.toString() 
+          } 
+        };
       }
 
       const authUser = data.user ? {
@@ -135,12 +184,24 @@ export const authService = {
         created_at: data.user.created_at
       } : null;
 
+      console.log("Login successful for:", email);
       return { user: authUser, error: null };
-    } catch (error) {
-      console.error("Sign in error:", error);
+      
+    } catch (error: any) {
+      console.error("Sign in exception:", error);
+      
+      // Retry on network exceptions
+      if (retries > 0 && (error.message?.includes('fetch') || error.message?.includes('network'))) {
+        console.log(`Retrying login after exception... (${retries} attempts remaining)`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return this.signIn(email, password, retries - 1);
+      }
+      
       return { 
         user: null, 
-        error: { message: "An unexpected error occurred during sign in" } 
+        error: { 
+          message: diagnoseNetworkError(error)
+        } 
       };
     }
   },

@@ -1,11 +1,12 @@
 import { SEO } from "@/components/SEO";
 import { useState } from "react";
 import Link from "next/link";
-import { TrendingUp, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { TrendingUp, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { authService } from "@/services/authService";
 import { useRouter } from "next/router";
 
@@ -14,19 +15,28 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
     
-    const { error } = await authService.signIn(email, password);
+    console.log("Login attempt started...");
+    
+    const { user, error: authError } = await authService.signIn(email, password);
 
-    if (error) {
-      alert(error.message);
+    if (authError) {
+      console.error("Login failed:", authError);
+      setError(authError.message);
       setIsLoading(false);
-    } else {
+    } else if (user) {
+      console.log("Login successful, redirecting...");
       router.push("/dashboard");
+    } else {
+      setError("Login failed. Please try again.");
+      setIsLoading(false);
     }
   };
 
@@ -49,6 +59,13 @@ export default function Login() {
               <p className="text-gray-400">Sign in to access your account</p>
             </div>
 
+            {error && (
+              <Alert variant="destructive" className="mb-6">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
             <form onSubmit={handleLogin} className="space-y-6">
               <div>
                 <Label htmlFor="email" className="text-gray-300">Email Address</Label>
@@ -62,6 +79,7 @@ export default function Login() {
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-11 bg-slate-950 border-purple-500/30 text-white"
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
@@ -78,11 +96,13 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-11 pr-11 bg-slate-950 border-purple-500/30 text-white"
                     required
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                    disabled={isLoading}
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -91,7 +111,7 @@ export default function Login() {
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" id="remember" className="w-4 h-4" />
+                  <input type="checkbox" id="remember" className="w-4 h-4" disabled={isLoading} />
                   <Label htmlFor="remember" className="text-gray-400 text-sm">Remember me</Label>
                 </div>
                 <Link href="/forgot-password" className="text-purple-400 text-sm hover:text-purple-300">
@@ -115,6 +135,17 @@ export default function Login() {
                   Sign Up
                 </Link>
               </p>
+            </div>
+
+            {/* Network diagnostic info */}
+            <div className="mt-6 p-4 bg-slate-950/50 rounded-lg text-xs text-gray-500">
+              <p className="font-semibold mb-1">Troubleshooting Tips:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Check your internet connection</li>
+                <li>Try refreshing the page</li>
+                <li>Clear browser cache if the issue persists</li>
+                <li>Ensure Supabase is accessible in your region</li>
+              </ul>
             </div>
           </Card>
         </div>
