@@ -24,12 +24,14 @@ export default function Signup() {
   const [isLoading, setIsLoading] = useState(false);
   const [referralCodeStatus, setReferralCodeStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [referralCodeError, setReferralCodeError] = useState("");
+  const [isReferralLocked, setIsReferralLocked] = useState(false);
 
   useEffect(() => {
     // Get referral code from URL
     const ref = router.query.ref as string;
     if (ref) {
-      setFormData(prev => ({ ...prev, referralCode: ref }));
+      setFormData(prev => ({ ...prev, referralCode: ref.toUpperCase() }));
+      setIsReferralLocked(true); // Lock the field when coming from referral link
     }
   }, [router.query]);
 
