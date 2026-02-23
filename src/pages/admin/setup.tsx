@@ -1,404 +1,296 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { SEO } from "@/components/SEO";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/router";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { authService } from "@/services/authService";
-import { Shield, UserCog, Crown, CheckCircle, XCircle } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle2, Lock } from "lucide-react";
+import { useRouter } from "next/router";
 
 export default function AdminSetup() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "master_admin">("admin");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [existingAdmins, setExistingAdmins] = useState<any[]>([]);
+  const [setupComplete, setSetupComplete] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
 
-  useEffect(() => {
-    checkAuth();
-    fetchAdmins();
-  }, []);
-
-  const checkAuth = async () => {
-    const user = await authService.getCurrentUser();
-    if (!user) {
-      router.push("/login");
+  const createAdminAccount = async () => {
+    if (!email || !password || !fullName) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
       return;
     }
 
-    // Check if user is master_admin
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "master_admin") {
-      // If no master admin exists yet, allow first setup
-      const { data: admins } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("role", "master_admin");
-
-      if (admins && admins.length > 0) {
-        router.push("/dashboard");
-        return;
-      }
-    }
-
-    setCurrentUser(user);
-  };
-
-  const fetchAdmins = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, role, created_at")
-      .in("role", ["admin", "master_admin"])
-      .order("created_at", { ascending: false });
-
-    setExistingAdmins(data || []);
-  };
-
-  const handlePromoteUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      // Find user by email
-      const { data: profiles, error: findError } = await supabase
-        .from("profiles")
-        .select("id, email, role")
-        .eq("email", email)
-        .single();
-
-      if (findError || !profiles) {
-        setMessage({ type: "error", text: "User not found with this email" });
-        setLoading(false);
-        return;
-      }
-
-      // Update role in profiles table
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ role })
-        .eq("id", profiles.id);
-
-      if (updateError) {
-        setMessage({ type: "error", text: `Failed to update profile: ${updateError.message}` });
-        setLoading(false);
-        return;
-      }
-
-      // Update users table (role is only in profiles now, skipping users table update for role)
-      /* 
-      await supabase
-        .from("users")
-        .update({ role })
-        .eq("id", profiles.id);
-      */
-
-      setMessage({ 
-        type: "success", 
-        text: `Successfully promoted ${email} to ${role === "master_admin" ? "Master Admin" : "Admin"}` 
+    if (password !== confirmPassword) {
+      toast({
+        title: "Password Mismatch",
+        description: "Passwords do not match",
+        variant: "destructive",
       });
-      
-      setEmail("");
-      fetchAdmins();
-    } catch (error) {
-      setMessage({ type: "error", text: "An unexpected error occurred" });
-    }
-
-    setLoading(false);
-  };
-
-  const handleCreateAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      // Create new admin account
-      const { user, error } = await authService.signUp(email, password, `ADMIN${Date.now()}`);
-
-      if (error) {
-        setMessage({ type: "error", text: error.message });
-        setLoading(false);
-        return;
-      }
-
-      if (!user) {
-        setMessage({ type: "error", text: "Failed to create user" });
-        setLoading(false);
-        return;
-      }
-
-      // Update role
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ role })
-        .eq("id", user.id);
-
-      if (updateError) {
-        setMessage({ type: "error", text: `User created but failed to set admin role: ${updateError.message}` });
-        setLoading(false);
-        return;
-      }
-
-      // Update users table (role is only in profiles now, skipping users table update for role)
-      /*
-      await supabase
-        .from("users")
-        .update({ role })
-        .eq("id", user.id);
-      */
-
-      setMessage({ 
-        type: "success", 
-        text: `Successfully created new ${role === "master_admin" ? "Master Admin" : "Admin"} account` 
-      });
-      
-      setEmail("");
-      setPassword("");
-      fetchAdmins();
-    } catch (error) {
-      setMessage({ type: "error", text: "An unexpected error occurred" });
-    }
-
-    setLoading(false);
-  };
-
-  const handleRevokeAdmin = async (userId: string, userEmail: string) => {
-    if (!confirm(`Are you sure you want to revoke admin access for ${userEmail}?`)) {
       return;
     }
 
-    try {
-      // Update role back to user
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ role: "user" })
-        .eq("id", userId);
+    if (password.length < 8) {
+      toast({
+        title: "Weak Password",
+        description: "Password must be at least 8 characters",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      if (updateError) {
-        setMessage({ type: "error", text: `Failed to revoke access: ${updateError.message}` });
-        return;
+    setLoading(true);
+
+    try {
+      // Step 1: Create Supabase Auth account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("Failed to create user");
+
+      console.log("✅ Step 1: Auth account created:", authData.user.id);
+
+      // Step 2: Update profile to master_admin role
+      const { error: profileError } = await (supabase as any)
+        .from("profiles")
+        .update({
+          role: "master_admin",
+          full_name: fullName,
+        })
+        .eq("id", authData.user.id);
+
+      if (profileError) {
+        console.error("Profile update error:", profileError);
+        throw profileError;
       }
 
-      // Update users table (role is only in profiles now, skipping users table update for role)
-      /*
-      await supabase
-        .from("users")
-        .update({ role: "user" })
-        .eq("id", userId);
-      */
+      console.log("✅ Step 2: Profile updated to master_admin");
 
-      setMessage({ type: "success", text: `Successfully revoked admin access for ${userEmail}` });
-      fetchAdmins();
-    } catch (error) {
-      setMessage({ type: "error", text: "An unexpected error occurred" });
+      // Step 3: Create or update users table entry
+      const referralCode = `ADMIN${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      
+      const { error: usersError } = await (supabase as any)
+        .from("users")
+        .upsert({
+          id: authData.user.id,
+          email,
+          referral_code: referralCode,
+        });
+
+      if (usersError) {
+        console.error("Users table error:", usersError);
+        throw usersError;
+      }
+
+      console.log("✅ Step 3: Users table entry created");
+
+      // Step 4: Initialize wallets
+      const { error: walletsError } = await (supabase as any)
+        .from("wallets")
+        .upsert({
+          user_id: authData.user.id,
+          main_balance: 0,
+          roi_balance: 0,
+          commission_balance: 0,
+          p2p_balance: 0,
+        });
+
+      if (walletsError) {
+        console.error("Wallets error:", walletsError);
+        throw walletsError;
+      }
+
+      console.log("✅ Step 4: Wallets initialized");
+
+      setSetupComplete(true);
+
+      toast({
+        title: "🎉 Admin Account Created!",
+        description: "You can now login with your admin credentials",
+      });
+
+      // Redirect to login after 3 seconds
+      setTimeout(() => {
+        router.push("/login");
+      }, 3000);
+
+    } catch (error: any) {
+      console.error("❌ Setup error:", error);
+      toast({
+        title: "Setup Failed",
+        description: error.message || "Failed to create admin account",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
+
+  if (setupComplete) {
+    return (
+      <>
+        <SEO title="Admin Setup Complete - Sui24" />
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-8 bg-white/10 backdrop-blur-lg border-white/20">
+            <div className="text-center space-y-6">
+              <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-10 h-10 text-green-400" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  Setup Complete! 🎉
+                </h2>
+                <p className="text-gray-300">
+                  Your admin account has been created successfully.
+                </p>
+                <p className="text-gray-400 text-sm mt-4">
+                  Redirecting to login page...
+                </p>
+              </div>
+              <Button
+                onClick={() => router.push("/login")}
+                className="w-full"
+              >
+                Go to Login
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
-      <SEO 
-        title="Admin Setup - Sui24"
-        description="Configure admin accounts for Sui24 platform"
-      />
-      
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-black text-white">
-        <div className="container mx-auto px-4 py-12">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-8">
-              <Crown className="w-16 h-16 mx-auto mb-4 text-yellow-400" />
-              <h1 className="text-4xl font-bold mb-2">Admin Account Setup</h1>
-              <p className="text-gray-400">Manage platform administrators</p>
+      <SEO title="Admin Setup - Sui24" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md p-8 bg-white/10 backdrop-blur-lg border-white/20">
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto">
+                <Shield className="w-8 h-8 text-purple-400" />
+              </div>
+              <h1 className="text-2xl font-bold text-white">
+                Admin Account Setup
+              </h1>
+              <p className="text-gray-400 text-sm">
+                Create your master admin account
+              </p>
             </div>
 
-            {message && (
-              <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-                message.type === "success" ? "bg-green-500/20 border border-green-500/50" : "bg-red-500/20 border border-red-500/50"
-              }`}>
-                {message.type === "success" ? (
-                  <CheckCircle className="w-5 h-5 text-green-400" />
-                ) : (
-                  <XCircle className="w-5 h-5 text-red-400" />
-                )}
-                <p className={message.type === "success" ? "text-green-300" : "text-red-300"}>
-                  {message.text}
+            {/* Warning */}
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-200">
+                <p className="font-semibold mb-1">Security Notice</p>
+                <p className="text-yellow-300/80">
+                  This page should only be used once to create the initial admin account.
+                  Store credentials securely.
                 </p>
               </div>
-            )}
-
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
-              {/* Promote Existing User */}
-              <Card className="bg-white/5 border-white/10 p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <UserCog className="w-6 h-6 text-blue-400" />
-                  <h2 className="text-xl font-semibold">Promote Existing User</h2>
-                </div>
-                
-                <form onSubmit={handlePromoteUser} className="space-y-4">
-                  <div>
-                    <Label htmlFor="promote-email">User Email</Label>
-                    <Input
-                      id="promote-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@example.com"
-                      required
-                      className="bg-white/5 border-white/10"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="promote-role">Admin Role</Label>
-                    <Select value={role} onValueChange={(value: "admin" | "master_admin") => setRole(value)}>
-                      <SelectTrigger className="bg-white/5 border-white/10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="master_admin">Master Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button 
-                    type="submit" 
-                    disabled={loading}
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                  >
-                    {loading ? "Processing..." : "Promote User"}
-                  </Button>
-                </form>
-              </Card>
-
-              {/* Create New Admin */}
-              <Card className="bg-white/5 border-white/10 p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <Shield className="w-6 h-6 text-green-400" />
-                  <h2 className="text-xl font-semibold">Create New Admin</h2>
-                </div>
-                
-                <form onSubmit={handleCreateAdmin} className="space-y-4">
-                  <div>
-                    <Label htmlFor="new-email">Admin Email</Label>
-                    <Input
-                      id="new-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="admin@sui24.trade"
-                      required
-                      className="bg-white/5 border-white/10"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="new-password">Password</Label>
-                    <Input
-                      id="new-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Strong password"
-                      required
-                      minLength={6}
-                      className="bg-white/5 border-white/10"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="new-role">Admin Role</Label>
-                    <Select value={role} onValueChange={(value: "admin" | "master_admin") => setRole(value)}>
-                      <SelectTrigger className="bg-white/5 border-white/10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="master_admin">Master Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button 
-                    type="submit" 
-                    disabled={loading}
-                    className="w-full bg-green-600 hover:bg-green-700"
-                  >
-                    {loading ? "Creating..." : "Create Admin Account"}
-                  </Button>
-                </form>
-              </Card>
             </div>
 
-            {/* Existing Admins List */}
-            <Card className="bg-white/5 border-white/10 p-6">
-              <h2 className="text-xl font-semibold mb-4">Current Administrators</h2>
-              
-              {existingAdmins.length === 0 ? (
-                <p className="text-gray-400 text-center py-8">No administrators found</p>
-              ) : (
-                <div className="space-y-3">
-                  {existingAdmins.map((admin) => (
-                    <div 
-                      key={admin.id}
-                      className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
-                    >
-                      <div>
-                        <p className="font-medium">{admin.email}</p>
-                        <p className="text-sm text-gray-400">{admin.full_name || "No name set"}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Created: {new Date(admin.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          admin.role === "master_admin" 
-                            ? "bg-yellow-500/20 text-yellow-300" 
-                            : "bg-blue-500/20 text-blue-300"
-                        }`}>
-                          {admin.role === "master_admin" ? "Master Admin" : "Admin"}
-                        </span>
-                        {currentUser?.id !== admin.id && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleRevokeAdmin(admin.id, admin.email)}
-                            className="border-red-500/50 text-red-300 hover:bg-red-500/10"
-                          >
-                            Revoke
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
+            {/* Form */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="fullName" className="text-white">
+                  Full Name
+                </Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="Admin Name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                />
+              </div>
 
-            <div className="text-center mt-8">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-white">
+                  Email Address
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@sui24.trade"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-white">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Min. 8 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-white">
+                  Confirm Password
+                </Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                />
+              </div>
+
               <Button
-                variant="outline"
-                onClick={() => router.push("/admin/dashboard")}
-                className="border-white/20 text-gray-300 hover:bg-white/5"
+                onClick={createAdminAccount}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-3"
               >
-                Go to Admin Dashboard
+                {loading ? (
+                  <>
+                    <Lock className="w-4 h-4 mr-2 animate-spin" />
+                    Creating Admin Account...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4 mr-2" />
+                    Create Admin Account
+                  </>
+                )}
               </Button>
             </div>
+
+            {/* Info */}
+            <div className="text-center text-xs text-gray-400 space-y-1">
+              <p>🔒 All credentials are encrypted and stored securely</p>
+              <p>📧 A confirmation email will be sent to the provided address</p>
+            </div>
           </div>
-        </div>
+        </Card>
       </div>
     </>
   );
