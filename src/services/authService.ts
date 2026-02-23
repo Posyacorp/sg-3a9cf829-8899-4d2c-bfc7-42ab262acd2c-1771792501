@@ -296,7 +296,7 @@ export const authService = {
   async resetPassword(email: string): Promise<{ error: AuthError | null }> {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${getURL()}auth/reset-password`,
+        redirectTo: `${getURL()}reset-password`,
       });
 
       if (error) {
@@ -308,6 +308,26 @@ export const authService = {
       console.error("Reset password error:", error);
       return { 
         error: { message: "An unexpected error occurred during password reset" } 
+      };
+    }
+  },
+
+  // Update password (for password reset flow)
+  async updatePassword(newPassword: string): Promise<{ error: AuthError | null }> {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        return { error: { message: error.message } };
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error("Update password error:", error);
+      return { 
+        error: { message: "An unexpected error occurred while updating password" } 
       };
     }
   },
