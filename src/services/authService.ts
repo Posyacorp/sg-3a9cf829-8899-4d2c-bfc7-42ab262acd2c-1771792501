@@ -177,12 +177,80 @@ export const authService = {
         };
       }
 
-      const authUser = data.user ? {
+      if (!data.user) {
+        return {
+          user: null,
+          error: { message: "Login failed - no user data returned" }
+        };
+      }
+
+      const authUser: AuthUser = {
         id: data.user.id,
         email: data.user.email || "",
         user_metadata: data.user.user_metadata,
         created_at: data.user.created_at
-      } : null;
+      };
+
+      // Ensure profile exists after successful login
+      try {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (profileError) {
+          console.warn("Profile check error:", profileError);
+        }
+
+        // Create profile if it doesn't exist
+        if (!profileData) {
+          console.log("Profile not found, creating...");
+          const { error: createError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: data.user.id,
+              email: data.user.email || email,
+              referral_code: data.user.user_metadata?.referral_code || `SUI${Math.floor(100000 + Math.random() * 900000)}`,
+              role: 'user',
+              status: 'active'
+            }, { onConflict: 'id' });
+
+          if (createError) {
+            console.error("Profile creation error:", createError);
+          }
+        }
+
+        // Ensure users table entry exists
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (userError) {
+          console.warn("Users table check error:", userError);
+        }
+
+        if (!userData) {
+          console.log("Users table entry not found, creating...");
+          const { error: createUserError } = await supabase
+            .from('users')
+            .upsert({
+              id: data.user.id,
+              email: data.user.email || email,
+              referral_code: data.user.user_metadata?.referral_code || `SUI${Math.floor(100000 + Math.random() * 900000)}`,
+              account_status: 'active'
+            }, { onConflict: 'id' });
+
+          if (createUserError) {
+            console.error("Users table creation error:", createUserError);
+          }
+        }
+      } catch (profileException) {
+        console.error("Profile/User creation exception:", profileException);
+        // Don't fail the login if profile creation fails
+      }
 
       console.log("Login successful for:", email);
       return { user: authUser, error: null };

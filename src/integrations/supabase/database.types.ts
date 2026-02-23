@@ -500,22 +500,27 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          bio: string | null
           created_at: string | null
           email: string | null
+          email_notifications: boolean | null
           fraud_score: number | null
           full_name: string | null
           id: string
           ip_address: string | null
           is_flagged_for_review: boolean | null
           kyc_verified: boolean | null
+          language: string | null
           last_ip_address: string | null
           password_hash: string | null
+          phone: string | null
           referral_code: string | null
           referred_by: string | null
           role: string | null
           star_rank: number | null
           status: string | null
           team_volume: number | null
+          timezone: string | null
           total_deposited: number | null
           total_earned: number | null
           total_withdrawn: number | null
@@ -526,22 +531,27 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
           email?: string | null
+          email_notifications?: boolean | null
           fraud_score?: number | null
           full_name?: string | null
           id: string
           ip_address?: string | null
           is_flagged_for_review?: boolean | null
           kyc_verified?: boolean | null
+          language?: string | null
           last_ip_address?: string | null
           password_hash?: string | null
+          phone?: string | null
           referral_code?: string | null
           referred_by?: string | null
           role?: string | null
           star_rank?: number | null
           status?: string | null
           team_volume?: number | null
+          timezone?: string | null
           total_deposited?: number | null
           total_earned?: number | null
           total_withdrawn?: number | null
@@ -552,22 +562,27 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
           email?: string | null
+          email_notifications?: boolean | null
           fraud_score?: number | null
           full_name?: string | null
           id?: string
           ip_address?: string | null
           is_flagged_for_review?: boolean | null
           kyc_verified?: boolean | null
+          language?: string | null
           last_ip_address?: string | null
           password_hash?: string | null
+          phone?: string | null
           referral_code?: string | null
           referred_by?: string | null
           role?: string | null
           star_rank?: number | null
           status?: string | null
           team_volume?: number | null
+          timezone?: string | null
           total_deposited?: number | null
           total_earned?: number | null
           total_withdrawn?: number | null
