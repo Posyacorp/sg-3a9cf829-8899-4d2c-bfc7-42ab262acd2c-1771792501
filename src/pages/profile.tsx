@@ -139,33 +139,41 @@ export default function Profile() {
 
   const loadStats = async (userId: string) => {
     try {
-      // Load user packages
-      const { data: packages } = await supabase
+      // Load user packages with explicit typing
+      const packagesQuery = await supabase
         .from("user_packages")
-        .select("*")
+        .select("current_roi_earned")
         .eq("user_id", userId)
         .eq("status", "active");
+      
+      const packages = packagesQuery.data as Array<{ current_roi_earned?: number }> | null;
 
-      // Load transactions
-      const { data: deposits } = await supabase
+      // Load transactions with explicit typing
+      const depositsQuery = await supabase
         .from("transactions")
         .select("amount")
         .eq("user_id", userId)
         .eq("type", "deposit")
         .eq("status", "completed");
+      
+      const deposits = depositsQuery.data as Array<{ amount: number | string }> | null;
 
-      const { data: withdrawals } = await supabase
+      const withdrawalsQuery = await supabase
         .from("transactions")
         .select("amount")
         .eq("user_id", userId)
         .eq("type", "withdrawal")
         .eq("status", "completed");
+      
+      const withdrawals = withdrawalsQuery.data as Array<{ amount: number | string }> | null;
 
-      // Load referrals
-      const { data: referrals } = await supabase
+      // Load referrals with explicit typing
+      const referralsQuery = await supabase
         .from("profiles")
         .select("id, referral_code")
         .eq("referred_by", userId);
+      
+      const referrals = referralsQuery.data as Array<{ id: string; referral_code: string }> | null;
 
       const totalDeposits = deposits?.reduce((sum, d) => sum + Number(d.amount), 0) || 0;
       const totalWithdrawals = withdrawals?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
