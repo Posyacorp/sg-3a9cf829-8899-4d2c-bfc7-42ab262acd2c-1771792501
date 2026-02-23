@@ -23,7 +23,12 @@ import {
   Wallet,
   QrCode,
   LogOut,
-  Home
+  Home,
+  Upload,
+  AlertCircle,
+  CheckCircle2,
+  Activity,
+  Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,6 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { authService } from "@/services/authService";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface UserProfile {
   id: string;
@@ -47,6 +53,7 @@ interface UserProfile {
   email_notifications: boolean;
   language: string;
   timezone: string;
+  two_factor_enabled?: boolean;
 }
 
 interface UserStats {
@@ -57,6 +64,20 @@ interface UserStats {
   currentRank: string;
   totalReferrals: number;
   activeDownline: number;
+}
+
+interface RecentActivity {
+  id: string;
+  type: string;
+  amount: number;
+  status: string;
+  created_at: string;
+}
+
+interface ValidationErrors {
+  full_name?: string;
+  phone?: string;
+  bio?: string;
 }
 
 export default function Profile() {
@@ -76,7 +97,7 @@ export default function Profile() {
     totalReferrals: 0,
     activeDownline: 0
   });
-
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [editedProfile, setEditedProfile] = useState<Partial<UserProfile>>({});
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -84,6 +105,10 @@ export default function Profile() {
     confirmPassword: ""
   });
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -100,6 +125,7 @@ export default function Profile() {
 
       await loadProfile(session.user.id);
       await loadStats(session.user.id);
+      await loadRecentActivity(session.user.id);
     } catch (error) {
       console.error("Auth check error:", error);
       router.push("/login");
@@ -121,7 +147,8 @@ export default function Profile() {
           ...data,
           email_notifications: data.email_notifications ?? true,
           language: data.language || "en",
-          timezone: data.timezone || "UTC"
+          timezone: data.timezone || "UTC",
+          two_factor_enabled: data.two_factor_enabled ?? false
         });
         setEditedProfile(data);
       }
@@ -139,18 +166,12 @@ export default function Profile() {
 
   const loadStats = async (userId: string) => {
     try {
-      // We cast supabase to any to completely bypass TS2589 (excessively deep type instantiation)
-      // This is necessary because the auto-generated types for complex joins/filters are causing
-      // infinite recursion in the TypeScript compiler.
-      
-      // Load user packages
       const { data: packages } = await (supabase as any)
         .from("user_packages")
         .select("current_roi_earned")
         .eq("user_id", userId)
         .eq("status", "active");
 
-      // Load transactions
       const { data: deposits } = await (supabase as any)
         .from("transactions")
         .select("amount")
@@ -165,7 +186,6 @@ export default function Profile() {
         .eq("type", "withdrawal")
         .eq("status", "completed");
 
-      // Load referrals
       const { data: referrals } = await (supabase as any)
         .from("profiles")
         .select("id, referral_code")
@@ -189,6 +209,22 @@ export default function Profile() {
     }
   };
 
+  const loadRecentActivity = async (userId: string) => {
+    try {
+      const { data, error } = await (supabase as any)
+        .from("transactions")
+        .select("id, type, amount, status, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setRecentActivity(data || []);
+    } catch (error) {
+      console.error("Error loading activity:", error);
+    }
+  };
+
   const calculateRank = (volume: number): string => {
     if (volume >= 2250000) return "Star 7";
     if (volume >= 375000) return "Star 6";
@@ -200,18 +236,151 @@ export default function Profile() {
     return "Unranked";
   };
 
+  const calculateProfileCompletion = (): number => {
+    if (!profile) return 0;
+    let completed = 0;
+    const fields = ['full_name', 'phone', 'bio', 'avatar_url'];
+    fields.forEach(field => {
+      if (profile[field as keyof UserProfile]) completed += 25;
+    });
+    return completed;
+  };
+
+  const validateField = (field: string, value: string): string | undefined => {
+    switch (field) {
+      case 'full_name':
+        if (!value.trim()) return "Full name is required";
+        if (value.length < 2) return "Full name must be at least 2 characters";
+        if (value.length > 50) return "Full name must be less than 50 characters";
+        break;
+      case 'phone':
+        if (value && !/^\+?[\d\s\-()]+$/.test(value)) return "Invalid phone number format";
+        break;
+      case 'bio':
+        if (value && value.length > 500) return "Bio must be less than 500 characters";
+        break;
+    }
+    return undefined;
+  };
+
+  const handleFieldChange = (field: string, value: string) => {
+    setEditedProfile({ ...editedProfile, [field]: value });
+    const error = validateField(field, value);
+    setValidationErrors({ ...validationErrors, [field]: error });
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Error",
+        description: "Please select an image file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: "Error",
+        description: "Image size must be less than 2MB",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setAvatarFile(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const uploadAvatar = async (): Promise<string | null> => {
+    if (!avatarFile || !profile) return null;
+
+    setUploadingAvatar(true);
+    try {
+      const fileExt = avatarFile.name.split('.').pop();
+      const fileName = `${profile.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('profiles')
+        .upload(filePath, avatarFile);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('profiles')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Error uploading avatar:", error);
+      toast({
+        title: "Error",
+        description: "Failed to upload avatar",
+        variant: "destructive"
+      });
+      return null;
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (!profile) return;
+
+    // Validate all fields
+    const errors: ValidationErrors = {};
+    if (editedProfile.full_name) {
+      const nameError = validateField('full_name', editedProfile.full_name);
+      if (nameError) errors.full_name = nameError;
+    }
+    if (editedProfile.phone) {
+      const phoneError = validateField('phone', editedProfile.phone);
+      if (phoneError) errors.phone = phoneError;
+    }
+    if (editedProfile.bio) {
+      const bioError = validateField('bio', editedProfile.bio);
+      if (bioError) errors.bio = bioError;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
 
     setIsSaving(true);
 
     try {
+      let avatarUrl = editedProfile.avatar_url;
+
+      // Upload avatar if changed
+      if (avatarFile) {
+        const uploadedUrl = await uploadAvatar();
+        if (uploadedUrl) {
+          avatarUrl = uploadedUrl;
+        }
+      }
+
       const { error } = await supabase
         .from("profiles")
         .update({
           full_name: editedProfile.full_name,
           phone: editedProfile.phone,
           bio: editedProfile.bio,
+          avatar_url: avatarUrl,
           email_notifications: editedProfile.email_notifications,
           language: editedProfile.language,
           timezone: editedProfile.timezone,
@@ -221,8 +390,11 @@ export default function Profile() {
 
       if (error) throw error;
 
-      setProfile({ ...profile, ...editedProfile });
+      setProfile({ ...profile, ...editedProfile, avatar_url: avatarUrl });
       setIsEditing(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setValidationErrors({});
 
       toast({
         title: "Success! ✅",
@@ -250,10 +422,10 @@ export default function Profile() {
       return;
     }
 
-    if (passwordData.newPassword.length < 6) {
+    if (passwordData.newPassword.length < 8) {
       toast({
         title: "Error",
-        description: "Password must be at least 6 characters",
+        description: "Password must be at least 8 characters",
         variant: "destructive"
       });
       return;
@@ -302,6 +474,29 @@ export default function Profile() {
     router.push("/login");
   };
 
+  const formatActivityType = (type: string): string => {
+    return type.charAt(0).toUpperCase() + type.slice(1);
+  };
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'deposit': return '💰';
+      case 'withdrawal': return '💸';
+      case 'commission': return '💵';
+      case 'roi': return '📈';
+      default: return '📝';
+    }
+  };
+
+  const getStatusColor = (status: string): string => {
+    switch (status) {
+      case 'completed': return 'text-green-400';
+      case 'pending': return 'text-yellow-400';
+      case 'failed': return 'text-red-400';
+      default: return 'text-white/60';
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen gradient-bg flex items-center justify-center">
@@ -319,6 +514,7 @@ export default function Profile() {
   }
 
   const referralLink = `${typeof window !== 'undefined' ? window.location.origin : ''}/signup?ref=${profile.referral_code}`;
+  const profileCompletion = calculateProfileCompletion();
 
   return (
     <>
@@ -370,16 +566,54 @@ export default function Profile() {
               <Card className="glass-effect border-white/10 p-6">
                 <div className="text-center">
                   <div className="relative inline-block mb-4">
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-3xl font-bold">
-                      {profile.full_name?.[0]?.toUpperCase() || profile.email[0].toUpperCase()}
-                    </div>
-                    <button className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-purple-500 hover:bg-purple-600 flex items-center justify-center text-white">
-                      <Camera className="w-4 h-4" />
-                    </button>
+                    {avatarPreview || profile.avatar_url ? (
+                      <img 
+                        src={avatarPreview || profile.avatar_url} 
+                        alt="Profile" 
+                        className="w-24 h-24 rounded-full object-cover border-4 border-purple-500/20"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-3xl font-bold">
+                        {profile.full_name?.[0]?.toUpperCase() || profile.email[0].toUpperCase()}
+                      </div>
+                    )}
+                    {isEditing && (
+                      <label className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-purple-500 hover:bg-purple-600 flex items-center justify-center text-white cursor-pointer transition-colors">
+                        <Camera className="w-4 h-4" />
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={handleAvatarChange}
+                          disabled={uploadingAvatar}
+                        />
+                      </label>
+                    )}
+                    {uploadingAvatar && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                        <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
                   </div>
 
                   <h2 className="text-xl font-bold text-white mb-1">{profile.full_name || "User"}</h2>
                   <p className="text-white/60 text-sm mb-4">{profile.email}</p>
+
+                  {/* Profile Completion */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="text-white/60">Profile Completion</span>
+                      <span className="text-white font-semibold">{profileCompletion}%</span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <motion.div 
+                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${profileCompletion}%` }}
+                        transition={{ duration: 0.5 }}
+                      />
+                    </div>
+                  </div>
 
                   <div className="flex items-center justify-center gap-2 text-sm text-white/60 mb-6">
                     <Calendar className="w-4 h-4" />
@@ -389,7 +623,10 @@ export default function Profile() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
                       <span className="text-white/60 text-sm">Account Status</span>
-                      <span className="text-green-400 font-semibold">Active</span>
+                      <span className="text-green-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Active
+                      </span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
                       <span className="text-white/60 text-sm">Current Rank</span>
@@ -433,6 +670,42 @@ export default function Profile() {
                   </div>
                 </div>
               </Card>
+
+              {/* Recent Activity */}
+              <Card className="glass-effect border-white/10 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-white">Recent Activity</h3>
+                  <Activity className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="space-y-3">
+                  {recentActivity.length > 0 ? (
+                    recentActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{getActivityIcon(activity.type)}</span>
+                          <div>
+                            <div className="text-white font-semibold text-sm">{formatActivityType(activity.type)}</div>
+                            <div className="text-white/40 text-xs flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(activity.created_at).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-white font-semibold text-sm">{activity.amount.toFixed(2)} SUI</div>
+                          <div className={`text-xs ${getStatusColor(activity.status)}`}>
+                            {activity.status}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-white/40 py-4">
+                      No recent activity
+                    </div>
+                  )}
+                </div>
+              </Card>
             </div>
 
             {/* Right Column - Edit Form */}
@@ -455,6 +728,9 @@ export default function Profile() {
                         onClick={() => {
                           setIsEditing(false);
                           setEditedProfile(profile);
+                          setAvatarFile(null);
+                          setAvatarPreview(null);
+                          setValidationErrors({});
                         }}
                         variant="outline"
                         className="border-white/20 text-white"
@@ -464,7 +740,7 @@ export default function Profile() {
                       </Button>
                       <Button
                         onClick={handleSaveProfile}
-                        disabled={isSaving}
+                        disabled={isSaving || Object.keys(validationErrors).some(key => validationErrors[key as keyof ValidationErrors])}
                         className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                       >
                         <Save className="w-4 h-4 mr-2" />
@@ -476,13 +752,21 @@ export default function Profile() {
 
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
-                    <Label className="text-white/80">Full Name</Label>
+                    <Label className="text-white/80">Full Name *</Label>
                     <Input
                       value={editedProfile.full_name || ""}
-                      onChange={(e) => setEditedProfile({ ...editedProfile, full_name: e.target.value })}
+                      onChange={(e) => handleFieldChange('full_name', e.target.value)}
                       disabled={!isEditing}
-                      className="mt-2 bg-white/5 border-white/10 text-white"
+                      className={`mt-2 bg-white/5 border-white/10 text-white ${
+                        validationErrors.full_name ? 'border-red-500' : ''
+                      }`}
                     />
+                    {validationErrors.full_name && (
+                      <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {validationErrors.full_name}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -498,11 +782,19 @@ export default function Profile() {
                     <Label className="text-white/80">Phone Number</Label>
                     <Input
                       value={editedProfile.phone || ""}
-                      onChange={(e) => setEditedProfile({ ...editedProfile, phone: e.target.value })}
+                      onChange={(e) => handleFieldChange('phone', e.target.value)}
                       disabled={!isEditing}
                       placeholder="+1 (555) 000-0000"
-                      className="mt-2 bg-white/5 border-white/10 text-white"
+                      className={`mt-2 bg-white/5 border-white/10 text-white ${
+                        validationErrors.phone ? 'border-red-500' : ''
+                      }`}
                     />
+                    {validationErrors.phone && (
+                      <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {validationErrors.phone}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -524,12 +816,25 @@ export default function Profile() {
                     <Label className="text-white/80">Bio</Label>
                     <Textarea
                       value={editedProfile.bio || ""}
-                      onChange={(e) => setEditedProfile({ ...editedProfile, bio: e.target.value })}
+                      onChange={(e) => handleFieldChange('bio', e.target.value)}
                       disabled={!isEditing}
                       placeholder="Tell us about yourself..."
                       rows={4}
-                      className="mt-2 bg-white/5 border-white/10 text-white resize-none"
+                      className={`mt-2 bg-white/5 border-white/10 text-white resize-none ${
+                        validationErrors.bio ? 'border-red-500' : ''
+                      }`}
                     />
+                    <div className="flex items-center justify-between mt-1">
+                      {validationErrors.bio && (
+                        <p className="text-red-400 text-xs flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          {validationErrors.bio}
+                        </p>
+                      )}
+                      <p className="text-white/40 text-xs ml-auto">
+                        {(editedProfile.bio || "").length}/500
+                      </p>
+                    </div>
                   </div>
                 </div>
               </Card>
@@ -596,59 +901,83 @@ export default function Profile() {
               <Card className="glass-effect border-white/10 p-6">
                 <h3 className="text-xl font-bold text-white mb-6">Security Settings</h3>
                 
-                {!showPasswordChange ? (
-                  <Button
-                    onClick={() => setShowPasswordChange(true)}
-                    variant="outline"
-                    className="border-white/20 text-white hover:bg-white/10"
-                  >
-                    <Lock className="w-4 h-4 mr-2" />
-                    Change Password
-                  </Button>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <Label className="text-white/80">New Password</Label>
-                      <Input
-                        type="password"
-                        value={passwordData.newPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                        placeholder="Enter new password"
-                        className="mt-2 bg-white/5 border-white/10 text-white"
-                      />
-                    </div>
+                <div className="space-y-6">
+                  {/* Password Change */}
+                  {!showPasswordChange ? (
+                    <Button
+                      onClick={() => setShowPasswordChange(true)}
+                      variant="outline"
+                      className="border-white/20 text-white hover:bg-white/10"
+                    >
+                      <Lock className="w-4 h-4 mr-2" />
+                      Change Password
+                    </Button>
+                  ) : (
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-white/80">New Password</Label>
+                        <Input
+                          type="password"
+                          value={passwordData.newPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                          placeholder="Enter new password"
+                          className="mt-2 bg-white/5 border-white/10 text-white"
+                        />
+                      </div>
 
-                    <div>
-                      <Label className="text-white/80">Confirm New Password</Label>
-                      <Input
-                        type="password"
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                        placeholder="Confirm new password"
-                        className="mt-2 bg-white/5 border-white/10 text-white"
-                      />
-                    </div>
+                      <div>
+                        <Label className="text-white/80">Confirm New Password</Label>
+                        <Input
+                          type="password"
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                          placeholder="Confirm new password"
+                          className="mt-2 bg-white/5 border-white/10 text-white"
+                        />
+                      </div>
 
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={handlePasswordChange}
-                        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                      >
-                        Update Password
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setShowPasswordChange(false);
-                          setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
-                        }}
-                        variant="outline"
-                        className="border-white/20 text-white"
-                      >
-                        Cancel
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handlePasswordChange}
+                          className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                        >
+                          Update Password
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setShowPasswordChange(false);
+                            setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+                          }}
+                          variant="outline"
+                          className="border-white/20 text-white"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
+                  )}
+
+                  {/* Two-Factor Authentication */}
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-3">
+                      <Shield className="w-5 h-5 text-purple-400" />
+                      <div>
+                        <div className="text-white font-semibold">Two-Factor Authentication</div>
+                        <div className="text-white/60 text-sm">Add an extra layer of security</div>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={editedProfile.two_factor_enabled ?? false}
+                      onCheckedChange={(checked) => {
+                        setEditedProfile({ ...editedProfile, two_factor_enabled: checked });
+                        toast({
+                          title: "Coming Soon",
+                          description: "Two-factor authentication will be available soon",
+                        });
+                      }}
+                    />
                   </div>
-                )}
+                </div>
               </Card>
 
               {/* Notification Settings */}
