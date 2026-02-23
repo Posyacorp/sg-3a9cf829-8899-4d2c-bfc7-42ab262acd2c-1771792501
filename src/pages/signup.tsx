@@ -238,6 +238,9 @@ export default function Signup() {
               <div>
                 <Label htmlFor="referralCode" className="text-gray-300">
                   Referral Code <span className="text-red-400">*</span>
+                  {isReferralLocked && (
+                    <span className="ml-2 text-xs text-purple-400">(Auto-filled from link)</span>
+                  )}
                 </Label>
                 <div className="relative mt-2">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
@@ -247,12 +250,17 @@ export default function Signup() {
                     placeholder="Enter referral code"
                     value={formData.referralCode}
                     onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
-                    className={`pl-11 pr-11 bg-slate-950 border-purple-500/30 text-white ${
+                    className={`pl-11 pr-11 bg-slate-950 text-white ${
+                      isReferralLocked 
+                        ? 'border-purple-500/50 cursor-not-allowed opacity-80' 
+                        : 'border-purple-500/30'
+                    } ${
                       referralCodeStatus === 'valid' ? 'border-green-500/50' : 
                       referralCodeStatus === 'invalid' ? 'border-red-500/50' : ''
                     }`}
                     required
                     disabled={isLoading}
+                    readOnly={isReferralLocked}
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
                     {referralCodeStatus === 'checking' && (
@@ -266,10 +274,13 @@ export default function Signup() {
                     )}
                   </div>
                 </div>
-                {referralCodeError && (
+                {isReferralLocked && (
+                  <p className="text-purple-400 text-sm mt-1">🔒 Referral code locked from your invite link</p>
+                )}
+                {referralCodeError && !isReferralLocked && (
                   <p className="text-red-400 text-sm mt-1">{referralCodeError}</p>
                 )}
-                {referralCodeStatus === 'valid' && (
+                {referralCodeStatus === 'valid' && !isReferralLocked && (
                   <p className="text-green-400 text-sm mt-1">✓ Valid referral code</p>
                 )}
               </div>
