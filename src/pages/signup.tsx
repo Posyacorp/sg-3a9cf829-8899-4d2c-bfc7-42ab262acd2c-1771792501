@@ -185,7 +185,7 @@ export default function Signup() {
               </div>
 
               <div>
-                <Label htmlFor="referralCode" className="text-gray-300">Referral Code (Optional)</Label>
+                <Label htmlFor="referralCode" className="text-gray-300">Referral Code (Required)</Label>
                 <div className="relative mt-2">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <Input
@@ -195,6 +195,7 @@ export default function Signup() {
                     value={formData.referralCode}
                     onChange={(e) => setFormData({ ...formData, referralCode: e.target.value })}
                     className="pl-11 bg-slate-950 border-purple-500/30 text-white"
+                    required
                   />
                 </div>
               </div>
