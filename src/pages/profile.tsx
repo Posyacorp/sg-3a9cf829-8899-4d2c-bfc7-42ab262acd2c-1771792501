@@ -139,46 +139,46 @@ export default function Profile() {
 
   const loadStats = async (userId: string) => {
     try {
+      // Type-safe queries using explicit typing to avoid TS2589
+      type PackageRow = { current_roi_earned: number | null };
+      type TransactionRow = { amount: number };
+      type ProfileRow = { id: string; referral_code: string };
+
       // Load user packages
-      // Casting to any to avoid TS2589 (excessively deep type instantiation)
-      const packagesResponse = await (supabase
+      const { data: packages } = await supabase
         .from("user_packages")
         .select("current_roi_earned")
         .eq("user_id", userId)
-        .eq("status", "active") as any);
-      
-      const packages = packagesResponse.data;
+        .eq("status", "active")
+        .returns<PackageRow[]>();
 
       // Load transactions
-      const depositsResponse = await (supabase
+      const { data: deposits } = await supabase
         .from("transactions")
         .select("amount")
         .eq("user_id", userId)
         .eq("type", "deposit")
-        .eq("status", "completed") as any);
-      
-      const deposits = depositsResponse.data;
+        .eq("status", "completed")
+        .returns<TransactionRow[]>();
 
-      const withdrawalsResponse = await (supabase
+      const { data: withdrawals } = await supabase
         .from("transactions")
         .select("amount")
         .eq("user_id", userId)
         .eq("type", "withdrawal")
-        .eq("status", "completed") as any);
-      
-      const withdrawals = withdrawalsResponse.data;
+        .eq("status", "completed")
+        .returns<TransactionRow[]>();
 
       // Load referrals
-      const referralsResponse = await (supabase
+      const { data: referrals } = await supabase
         .from("profiles")
         .select("id, referral_code")
-        .eq("referred_by", userId) as any);
-      
-      const referrals = referralsResponse.data;
+        .eq("referred_by", userId)
+        .returns<ProfileRow[]>();
 
-      const totalDeposits = deposits?.reduce((sum: number, d: any) => sum + Number(d.amount), 0) || 0;
-      const totalWithdrawals = withdrawals?.reduce((sum: number, w: any) => sum + Number(w.amount), 0) || 0;
-      const totalEarnings = packages?.reduce((sum: number, p: any) => sum + Number(p.current_roi_earned || 0), 0) || 0;
+      const totalDeposits = deposits?.reduce((sum, d) => sum + Number(d.amount), 0) || 0;
+      const totalWithdrawals = withdrawals?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
+      const totalEarnings = packages?.reduce((sum, p) => sum + Number(p.current_roi_earned || 0), 0) || 0;
 
       setStats({
         totalDeposits,
@@ -187,7 +187,7 @@ export default function Profile() {
         totalEarnings,
         currentRank: calculateRank(totalDeposits),
         totalReferrals: referrals?.length || 0,
-        activeDownline: referrals?.filter((r: any) => r.referral_code).length || 0
+        activeDownline: referrals?.filter(r => r.referral_code).length || 0
       });
     } catch (error) {
       console.error("Error loading stats:", error);
