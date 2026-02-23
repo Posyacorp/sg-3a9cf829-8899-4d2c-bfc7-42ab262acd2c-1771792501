@@ -110,25 +110,25 @@ export default function TransactionsPage() {
       setLoading(true);
 
       // Load all transaction types
-      const { data: depositsData } = await supabase
+      const { data: depositsData } = await (supabase as any)
         .from("deposits")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
-      const { data: withdrawalsData } = await supabase
+      const { data: withdrawalsData } = await (supabase as any)
         .from("withdrawals")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
-      const { data: commissionsData } = await supabase
+      const { data: commissionsData } = await (supabase as any)
         .from("commissions")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
-      const { data: packagesData } = await supabase
+      const { data: packagesData } = await (supabase as any)
         .from("user_packages")
         .select("*, packages(*)")
         .eq("user_id", userId)
@@ -138,7 +138,7 @@ export default function TransactionsPage() {
       const allTransactions: Transaction[] = [];
 
       // Add deposits
-      depositsData?.forEach((d) => {
+      depositsData?.forEach((d: any) => {
         allTransactions.push({
           id: d.id,
           type: "deposit",
@@ -151,7 +151,7 @@ export default function TransactionsPage() {
       });
 
       // Add withdrawals
-      withdrawalsData?.forEach((w) => {
+      withdrawalsData?.forEach((w: any) => {
         allTransactions.push({
           id: w.id,
           type: "withdrawal",
@@ -164,7 +164,7 @@ export default function TransactionsPage() {
       });
 
       // Add commissions
-      commissionsData?.forEach((c) => {
+      commissionsData?.forEach((c: any) => {
         allTransactions.push({
           id: c.id,
           type: "commission",
@@ -176,7 +176,7 @@ export default function TransactionsPage() {
       });
 
       // Add package purchases
-      packagesData?.forEach((p) => {
+      packagesData?.forEach((p: any) => {
         allTransactions.push({
           id: p.id,
           type: "package_purchase",
