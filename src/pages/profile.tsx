@@ -139,34 +139,37 @@ export default function Profile() {
 
   const loadStats = async (userId: string) => {
     try {
+      // We cast supabase to any to completely bypass TS2589 (excessively deep type instantiation)
+      // This is necessary because the auto-generated types for complex joins/filters are causing
+      // infinite recursion in the TypeScript compiler.
+      
       // Load user packages
-      // We cast to any to prevent TS2589 (excessively deep type instantiation)
-      const { data: packages } = await (supabase
+      const { data: packages } = await (supabase as any)
         .from("user_packages")
         .select("current_roi_earned")
         .eq("user_id", userId)
-        .eq("status", "active") as any);
+        .eq("status", "active");
 
       // Load transactions
-      const { data: deposits } = await (supabase
+      const { data: deposits } = await (supabase as any)
         .from("transactions")
         .select("amount")
         .eq("user_id", userId)
         .eq("type", "deposit")
-        .eq("status", "completed") as any);
+        .eq("status", "completed");
 
-      const { data: withdrawals } = await (supabase
+      const { data: withdrawals } = await (supabase as any)
         .from("transactions")
         .select("amount")
         .eq("user_id", userId)
         .eq("type", "withdrawal")
-        .eq("status", "completed") as any);
+        .eq("status", "completed");
 
       // Load referrals
-      const { data: referrals } = await (supabase
+      const { data: referrals } = await (supabase as any)
         .from("profiles")
         .select("id, referral_code")
-        .eq("referred_by", userId) as any);
+        .eq("referred_by", userId);
 
       const totalDeposits = deposits?.reduce((sum: number, d: any) => sum + Number(d.amount), 0) || 0;
       const totalWithdrawals = withdrawals?.reduce((sum: number, w: any) => sum + Number(w.amount), 0) || 0;
