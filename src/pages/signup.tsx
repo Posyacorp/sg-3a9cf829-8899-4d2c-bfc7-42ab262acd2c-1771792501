@@ -2,7 +2,7 @@ import { SEO } from "@/components/SEO";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { TrendingUp, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { TrendingUp, Mail, Lock, User, Eye, EyeOff, Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,8 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [referralCodeStatus, setReferralCodeStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [referralCodeError, setReferralCodeError] = useState("");
 
   useEffect(() => {
     // Get referral code from URL
@@ -31,6 +33,52 @@ export default function Signup() {
     }
   }, [router.query]);
 
+  // Real-time referral code validation
+  useEffect(() => {
+    const referralCode = formData.referralCode;
+    if (!referralCode || referralCode.trim().length === 0) {
+      setReferralCodeStatus('idle');
+      setReferralCodeError("");
+      return;
+    }
+
+    // Debounce the validation check
+    const timeoutId = setTimeout(async () => {
+      setReferralCodeStatus('checking');
+      setReferralCodeError("");
+
+      try {
+        // Check if referral code exists in profiles table
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .eq('referral_code', referralCode.trim())
+          .maybeSingle();
+
+        if (error) {
+          console.error("Referral code validation error:", error);
+          setReferralCodeStatus('invalid');
+          setReferralCodeError("Error checking referral code");
+          return;
+        }
+
+        if (!data) {
+          setReferralCodeStatus('invalid');
+          setReferralCodeError("Invalid referral code");
+        } else {
+          setReferralCodeStatus('valid');
+          setReferralCodeError("");
+        }
+      } catch (error) {
+        console.error("Referral code validation exception:", error);
+        setReferralCodeStatus('invalid');
+        setReferralCodeError("Error validating referral code");
+      }
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.referralCode]);
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -39,8 +87,9 @@ export default function Signup() {
       return;
     }
 
-    if (!formData.referralCode) {
-      alert("Referral code is mandatory. You cannot join without an inviter.");
+    // Final validation check
+    if (referralCodeStatus !== 'valid') {
+      alert("Please enter a valid referral code");
       return;
     }
 
@@ -185,7 +234,9 @@ export default function Signup() {
               </div>
 
               <div>
-                <Label htmlFor="referralCode" className="text-gray-300">Referral Code (Required)</Label>
+                <Label htmlFor="referralCode" className="text-gray-300">
+                  Referral Code <span className="text-red-400">*</span>
+                </Label>
                 <div className="relative mt-2">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <Input
@@ -193,11 +244,32 @@ export default function Signup() {
                     type="text"
                     placeholder="Enter referral code"
                     value={formData.referralCode}
-                    onChange={(e) => setFormData({ ...formData, referralCode: e.target.value })}
-                    className="pl-11 bg-slate-950 border-purple-500/30 text-white"
+                    onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
+                    className={`pl-11 pr-11 bg-slate-950 border-purple-500/30 text-white ${
+                      referralCodeStatus === 'valid' ? 'border-green-500/50' : 
+                      referralCodeStatus === 'invalid' ? 'border-red-500/50' : ''
+                    }`}
                     required
+                    disabled={isLoading}
                   />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {referralCodeStatus === 'checking' && (
+                      <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+                    )}
+                    {referralCodeStatus === 'valid' && (
+                      <Check className="w-5 h-5 text-green-400" />
+                    )}
+                    {referralCodeStatus === 'invalid' && (
+                      <X className="w-5 h-5 text-red-400" />
+                    )}
+                  </div>
                 </div>
+                {referralCodeError && (
+                  <p className="text-red-400 text-sm mt-1">{referralCodeError}</p>
+                )}
+                {referralCodeStatus === 'valid' && (
+                  <p className="text-green-400 text-sm mt-1">✓ Valid referral code</p>
+                )}
               </div>
 
               <Button 
