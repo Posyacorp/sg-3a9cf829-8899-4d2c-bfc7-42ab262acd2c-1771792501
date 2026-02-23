@@ -1,340 +1,416 @@
 import { SEO } from "@/components/SEO";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { TrendingUp, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Wifi, WifiOff } from "lucide-react";
+import { useRouter } from "next/router";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { authService } from "@/services/authService";
 import { supabase } from "@/integrations/supabase/client";
-import { useRouter } from "next/router";
-import { useToast } from "@/hooks/use-toast";
+import { authService } from "@/services/authService";
+import { Loader2, AlertCircle, CheckCircle2, Wifi, WifiOff, Eye, EyeOff, Mail, Lock } from "lucide-react";
+
+interface ValidationErrors {
+  email?: string;
+  password?: string;
+}
 
 export default function Login() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected' | null>(null);
-  const router = useRouter();
-  const { toast } = useToast();
+  const [connectionStatus, setConnectionStatus] = useState<"checking" | "connected" | "disconnected">("checking");
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [touched, setTouched] = useState({ email: false, password: false });
+
+  useEffect(() => {
+    testConnection();
+  }, []);
 
   const testConnection = async () => {
-    setConnectionStatus('checking');
-    toast({
-      title: "Testing Connection...",
-      description: "Checking Supabase connection",
-    });
-
+    setTestingConnection(true);
     try {
-      const { data, error } = await supabase.from('profiles').select('count').limit(1);
-      
-      if (error) {
-        console.error("Connection test failed:", error);
-        setConnectionStatus('disconnected');
-        toast({
-          variant: "destructive",
-          title: "Connection Failed ❌",
-          description: "Unable to reach authentication server",
-        });
-      } else {
-        console.log("Connection test successful:", data);
-        setConnectionStatus('connected');
-        toast({
-          title: "Connection Successful ✅",
-          description: "Authentication server is reachable",
-        });
-      }
+      const { data, error } = await supabase.from("profiles").select("count").limit(1);
+      if (error) throw error;
+      setConnectionStatus("connected");
+      console.log("✅ Supabase connected successfully");
     } catch (err) {
-      console.error("Connection exception:", err);
-      setConnectionStatus('disconnected');
-      toast({
-        variant: "destructive",
-        title: "Connection Error ❌",
-        description: "Network error - please check your internet",
-      });
+      console.error("❌ Connection test failed:", err);
+      setConnectionStatus("disconnected");
+    } finally {
+      setTestingConnection(false);
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // Email validation
+  const validateEmail = (email: string): string | undefined => {
+    if (!email) {
+      return "Email is required";
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return "Please enter a valid email address";
+    }
+    return undefined;
+  };
+
+  // Password validation
+  const validatePassword = (password: string): string | undefined => {
+    if (!password) {
+      return "Password is required";
+    }
+    if (password.length < 8) {
+      return "Password must be at least 8 characters";
+    }
+    return undefined;
+  };
+
+  // Validate all fields
+  const validateForm = (): boolean => {
+    const errors: ValidationErrors = {
+      email: validateEmail(email),
+      password: validatePassword(password),
+    };
+
+    setValidationErrors(errors);
+    return !errors.email && !errors.password;
+  };
+
+  // Handle field blur (touched state)
+  const handleBlur = (field: "email" | "password") => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    
+    // Validate on blur
+    if (field === "email") {
+      setValidationErrors((prev) => ({ ...prev, email: validateEmail(email) }));
+    } else {
+      setValidationErrors((prev) => ({ ...prev, password: validatePassword(password) }));
+    }
+  };
+
+  // Handle field change
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEmail(value);
+    
+    // Clear error when user starts typing
+    if (touched.email) {
+      setValidationErrors((prev) => ({ ...prev, email: validateEmail(value) }));
+    }
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setPassword(value);
+    
+    // Clear error when user starts typing
+    if (touched.password) {
+      setValidationErrors((prev) => ({ ...prev, password: validatePassword(value) }));
+    }
+  };
+
+  // Check if form is valid
+  const isFormValid = (): boolean => {
+    return !validateEmail(email) && !validatePassword(password) && connectionStatus === "connected";
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError("");
-    setSuccess(false);
     
-    console.log("🔐 Login attempt started...");
-    console.log("📧 Email:", email);
-    console.log("🌐 Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+    // Mark all fields as touched
+    setTouched({ email: true, password: true });
     
-    // Test connection first
-    try {
-      const { error: connectionError } = await supabase.from('profiles').select('count').limit(1);
-      if (connectionError) {
-        console.error("❌ Pre-login connection test failed:", connectionError);
-        setError("Cannot connect to authentication server. Please check your internet connection and try again.");
-        setIsLoading(false);
-        toast({
-          variant: "destructive",
-          title: "Connection Failed",
-          description: "Unable to reach authentication server",
-        });
-        return;
-      }
-      console.log("✅ Pre-login connection test passed");
-    } catch (connErr) {
-      console.error("❌ Connection exception:", connErr);
-      setError("Network error - unable to reach server. Please check your internet connection.");
-      setIsLoading(false);
+    // Validate form
+    if (!validateForm()) {
       return;
     }
-    
-    // Show loading toast
-    toast({
-      title: "Signing in...",
-      description: "Please wait while we verify your credentials",
-    });
-    
-    const { user, error: authError } = await authService.signIn(email, password);
 
-    if (authError) {
-      console.error("❌ Login failed:", authError);
-      setError(authError.message);
-      setIsLoading(false);
-      
-      // Show error toast
-      toast({
-        variant: "destructive",
-        title: "Login Failed",
-        description: authError.message,
-      });
-    } else if (user) {
-      console.log("✅ Login successful!");
-      console.log("👤 User:", user.email);
-      setSuccess(true);
-      
-      // Show success toast
-      toast({
-        title: "Login Successful! 🎉",
-        description: "Redirecting to your dashboard...",
-      });
-      
-      // Check user role and redirect accordingly
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
+    if (connectionStatus !== "connected") {
+      setError("Authentication server is not reachable. Please test connection first.");
+      return;
+    }
 
-        const isAdmin = profile?.role === 'admin' || profile?.role === 'master_admin';
-        
-        setTimeout(() => {
-          console.log("🔄 Redirecting to dashboard...");
-          router.push(isAdmin ? "/admin/dashboard" : "/dashboard");
-        }, 1500);
-      } catch (roleErr) {
-        console.error("Role check error:", roleErr);
-        // Default to user dashboard
-        setTimeout(() => {
-          router.push("/dashboard");
-        }, 1500);
+    setLoading(true);
+    setError("");
+
+    try {
+      console.log("🔐 Login attempt started...");
+      console.log("📧 Email:", email);
+
+      // Pre-login connection test
+      const { error: testError } = await supabase.from("profiles").select("count").limit(1);
+      if (testError) {
+        throw new Error("Connection test failed. Please check your internet connection.");
       }
-    } else {
-      console.error("❌ Unexpected error: No user returned");
-      setError("Login failed. Please try again.");
-      setIsLoading(false);
+      console.log("✅ Pre-login connection test passed");
+
+      // Attempt login with retry logic
+      let loginError: any = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        console.log(`🔄 Login attempt ${attempt}/2`);
+        
+        const result = await authService.signIn(email, password);
+        
+        if (result.error) {
+          loginError = result.error;
+          console.error(`❌ Attempt ${attempt} failed:`, result.error);
+          
+          if (attempt < 2) {
+            console.log("⏳ Retrying in 1 second...");
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } else {
+          console.log("✅ Login successful!");
+          loginError = null;
+          break;
+        }
+      }
+
+      if (loginError) {
+        throw loginError;
+      }
+
+      // Get user profile to check role
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("email", email)
+        .single();
+
+      // Redirect based on role
+      if (profile?.role === "master_admin" || profile?.role === "admin") {
+        console.log("🔐 Admin user detected, redirecting to admin dashboard");
+        router.push("/admin/dashboard");
+      } else {
+        console.log("👤 Regular user, redirecting to user dashboard");
+        router.push("/dashboard");
+      }
+    } catch (err: any) {
+      console.error("❌ Login error:", err);
       
-      toast({
-        variant: "destructive",
-        title: "Login Failed",
-        description: "An unexpected error occurred. Please try again.",
-      });
+      let errorMessage = "Login failed. Please try again.";
+      
+      if (err.message?.includes("Invalid login credentials")) {
+        errorMessage = "Invalid email or password. Please check your credentials and try again.";
+      } else if (err.message?.includes("Email not confirmed")) {
+        errorMessage = "Please verify your email address before logging in. Check your inbox for the verification link.";
+      } else if (err.message?.includes("network") || err.message?.includes("fetch")) {
+        errorMessage = "Network error: Unable to connect to authentication server. Please check your internet connection.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <>
-      <SEO title="Login - Sui24" />
-      
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex items-center justify-center p-4">
+      <SEO 
+        title="Login - Sui24"
+        description="Login to your Sui24 account to access trading, predictions, and MLM features"
+      />
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <Link href="/" className="flex items-center justify-center gap-2 mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-7 h-7 text-white" />
-            </div>
-            <span className="text-3xl font-black text-white">SUI24</span>
-          </Link>
-
-          <Card className="p-8 bg-slate-900/50 border-purple-500/20 backdrop-blur-xl">
+          <Card className="p-8 bg-gray-900/50 backdrop-blur border-purple-500/20">
+            {/* Header */}
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-black text-white mb-2">Welcome Back</h1>
-              <p className="text-gray-400">Sign in to access your account</p>
+              <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
+              <p className="text-gray-400">Login to your Sui24 account</p>
             </div>
 
-            {/* Connection Status Indicator */}
-            {connectionStatus && (
-              <Alert className={`mb-6 ${connectionStatus === 'connected' ? 'bg-green-500/10 border-green-500/50 text-green-400' : connectionStatus === 'disconnected' ? 'bg-red-500/10 border-red-500/50 text-red-400' : 'bg-blue-500/10 border-blue-500/50 text-blue-400'}`}>
-                {connectionStatus === 'checking' && <Loader2 className="h-4 w-4 animate-spin" />}
-                {connectionStatus === 'connected' && <Wifi className="h-4 w-4" />}
-                {connectionStatus === 'disconnected' && <WifiOff className="h-4 w-4" />}
-                <AlertDescription>
-                  {connectionStatus === 'checking' && "Testing connection..."}
-                  {connectionStatus === 'connected' && "✅ Connected to authentication server"}
-                  {connectionStatus === 'disconnected' && "❌ Cannot reach authentication server"}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Success Alert */}
-            {success && (
-              <Alert className="mb-6 bg-green-500/10 border-green-500/50 text-green-400">
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <div className="font-semibold">Login Successful! 🎉</div>
-                  <div className="text-sm mt-1">Redirecting to your dashboard...</div>
-                </AlertDescription>
-              </Alert>
-            )}
+            {/* Connection Status */}
+            <div className="mb-6">
+              <div className={`flex items-center gap-2 p-3 rounded-lg ${
+                connectionStatus === "connected" 
+                  ? "bg-green-500/10 border border-green-500/20" 
+                  : connectionStatus === "disconnected"
+                  ? "bg-red-500/10 border border-red-500/20"
+                  : "bg-blue-500/10 border border-blue-500/20"
+              }`}>
+                {connectionStatus === "checking" && <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />}
+                {connectionStatus === "connected" && <CheckCircle2 className="w-4 h-4 text-green-400" />}
+                {connectionStatus === "disconnected" && <AlertCircle className="w-4 h-4 text-red-400" />}
+                <span className={`text-sm ${
+                  connectionStatus === "connected" ? "text-green-400" : 
+                  connectionStatus === "disconnected" ? "text-red-400" : 
+                  "text-blue-400"
+                }`}>
+                  {connectionStatus === "checking" && "Checking connection..."}
+                  {connectionStatus === "connected" && "✓ Connected to authentication server"}
+                  {connectionStatus === "disconnected" && "⚠ Cannot reach authentication server"}
+                </span>
+              </div>
+              
+              {connectionStatus === "disconnected" && (
+                <Button
+                  type="button"
+                  onClick={testConnection}
+                  disabled={testingConnection}
+                  variant="outline"
+                  className="w-full mt-3 border-blue-500/20 hover:bg-blue-500/10"
+                >
+                  {testingConnection ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Testing Connection...
+                    </>
+                  ) : (
+                    <>
+                      <Wifi className="w-4 h-4 mr-2" />
+                      Test Connection
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
 
             {/* Error Alert */}
-            {error && !success && (
-              <Alert variant="destructive" className="mb-6">
+            {error && (
+              <Alert variant="destructive" className="mb-6 bg-red-500/10 border-red-500/20">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <div className="font-semibold mb-2">{error}</div>
-                  <div className="text-sm space-y-1">
-                    <div>Common issues:</div>
-                    <ul className="list-disc list-inside ml-2 space-y-1">
-                      <li>Check your email and password</li>
-                      <li>Make sure your account is verified</li>
-                      <li>Check your internet connection</li>
-                      <li>Try the "Test Connection" button below</li>
-                    </ul>
-                  </div>
+                <AlertDescription className="text-red-400">
+                  {error}
+                  {error.includes("Network error") && (
+                    <div className="mt-2 text-xs text-red-300">
+                      <p className="font-semibold mb-1">Common issues:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Check your email and password</li>
+                        <li>Make sure your account is verified</li>
+                        <li>Check your internet connection</li>
+                        <li>Try disabling VPN if enabled</li>
+                        <li>Clear browser cache and try again</li>
+                      </ul>
+                    </div>
+                  )}
                 </AlertDescription>
               </Alert>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div>
-                <Label htmlFor="email" className="text-gray-300">Email Address</Label>
-                <div className="relative mt-2">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Email Field */}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-white">
+                  Email Address
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <Input
                     id="email"
                     type="email"
-                    placeholder="your@email.com"
+                    placeholder="admin@sui24.trade"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-11 bg-slate-950 border-purple-500/30 text-white"
-                    required
-                    disabled={isLoading || success}
+                    onChange={handleEmailChange}
+                    onBlur={() => handleBlur("email")}
+                    disabled={loading}
+                    className={`pl-10 bg-gray-800/50 border-gray-700 text-white placeholder:text-gray-500 ${
+                      touched.email && validationErrors.email 
+                        ? "border-red-500 focus:border-red-500" 
+                        : touched.email && !validationErrors.email 
+                        ? "border-green-500 focus:border-green-500" 
+                        : ""
+                    }`}
+                    autoComplete="email"
                   />
+                  {touched.email && !validationErrors.email && (
+                    <CheckCircle2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-green-400" />
+                  )}
                 </div>
+                {touched.email && validationErrors.email && (
+                  <p className="text-xs text-red-400 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {validationErrors.email}
+                  </p>
+                )}
               </div>
 
-              <div>
-                <Label htmlFor="password" className="text-gray-300">Password</Label>
-                <div className="relative mt-2">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              {/* Password Field */}
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-white">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
+                    placeholder="Enter your password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-11 pr-11 bg-slate-950 border-purple-500/30 text-white"
-                    required
-                    disabled={isLoading || success}
+                    onChange={handlePasswordChange}
+                    onBlur={() => handleBlur("password")}
+                    disabled={loading}
+                    className={`pl-10 pr-10 bg-gray-800/50 border-gray-700 text-white placeholder:text-gray-500 ${
+                      touched.password && validationErrors.password 
+                        ? "border-red-500 focus:border-red-500" 
+                        : touched.password && !validationErrors.password 
+                        ? "border-green-500 focus:border-green-500" 
+                        : ""
+                    }`}
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
-                    disabled={isLoading || success}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                    tabIndex={-1}
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {touched.password && validationErrors.password && (
+                  <p className="text-xs text-red-400 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {validationErrors.password}
+                  </p>
+                )}
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="checkbox" 
-                    id="remember" 
-                    className="w-4 h-4" 
-                    disabled={isLoading || success} 
-                  />
-                  <Label htmlFor="remember" className="text-gray-400 text-sm">Remember me</Label>
-                </div>
-                <Link href="/forgot-password" className="text-purple-400 text-sm hover:text-purple-300">
+              {/* Forgot Password Link */}
+              <div className="flex justify-end">
+                <Link 
+                  href="/forgot-password" 
+                  className="text-sm text-purple-400 hover:text-purple-300"
+                >
                   Forgot password?
                 </Link>
               </div>
 
-              <Button 
+              {/* Submit Button */}
+              <Button
                 type="submit"
-                disabled={isLoading || success}
-                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 h-12 text-lg"
+                disabled={loading || !isFormValid()}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
               >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Signing in...
-                  </span>
-                ) : success ? (
-                  <span className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5" />
-                    Success! Redirecting...
-                  </span>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Signing In...
+                  </>
                 ) : (
                   "Sign In"
                 )}
               </Button>
+
+              {/* Validation Summary */}
+              {(touched.email || touched.password) && !isFormValid() && (
+                <div className="text-xs text-gray-400 text-center">
+                  {!email && !password && "Please fill in all fields"}
+                  {connectionStatus !== "connected" && "Please ensure connection is active"}
+                </div>
+              )}
             </form>
 
-            {/* Test Connection Button */}
-            {error && !isLoading && !success && (
-              <div className="mt-4 space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
-                  onClick={testConnection}
-                  disabled={connectionStatus === 'checking'}
-                >
-                  {connectionStatus === 'checking' ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Testing Connection...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Wifi className="w-4 h-4" />
-                      Test Connection
-                    </span>
-                  )}
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  className="w-full border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
-                  onClick={() => {
-                    setError("");
-                    setPassword("");
-                  }}
-                >
-                  Try Again
-                </Button>
-              </div>
-            )}
-
+            {/* Sign Up Link */}
             <div className="mt-6 text-center">
-              <p className="text-gray-400">
+              <p className="text-gray-400 text-sm">
                 Don't have an account?{" "}
                 <Link href="/signup" className="text-purple-400 hover:text-purple-300 font-semibold">
                   Sign Up
@@ -342,33 +418,12 @@ export default function Login() {
               </p>
             </div>
 
-            {/* Admin Quick Login Hint */}
-            <div className="mt-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-              <p className="text-sm text-purple-400 text-center">
-                <strong>Admin?</strong> Use your admin credentials to access the dashboard
-              </p>
-            </div>
-
-            {/* Network diagnostic info */}
-            <div className="mt-6 p-4 bg-slate-950/50 rounded-lg text-xs text-gray-500">
-              <p className="font-semibold mb-1">Troubleshooting Tips:</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Check your internet connection</li>
-                <li>Try refreshing the page</li>
-                <li>Clear browser cache if the issue persists</li>
-                <li>Click "Test Connection" to verify server status</li>
-                <li>Check browser console (F12) for detailed logs</li>
-              </ul>
-            </div>
-
-            {/* Console Log Indicator (Development Only) */}
+            {/* Admin Credentials Hint (for development only) */}
             {process.env.NODE_ENV === "development" && (
-              <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs text-blue-400">
-                <div className="font-semibold mb-1">🔧 Developer Mode</div>
-                <div>Check browser console (F12) for detailed logs</div>
-                <div className="mt-2 font-mono text-[10px] text-gray-500">
-                  Supabase URL: {process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30)}...
-                </div>
+              <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <p className="text-xs text-blue-400 font-semibold mb-2">🔐 Admin Login (Dev Mode):</p>
+                <p className="text-xs text-blue-300">Email: admin@sui24.trade</p>
+                <p className="text-xs text-blue-300">Password: Indiabulls@5aA</p>
               </div>
             )}
           </Card>
