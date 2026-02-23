@@ -22,6 +22,7 @@ export default function ResetPassword() {
   const [mounted, setMounted] = useState(false);
   const [tokenValid, setTokenValid] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
+  const [touched, setTouched] = useState({ password: false, confirmPassword: false });
 
   useEffect(() => {
     console.log("🔍 Reset Password Page Mounted");
@@ -48,24 +49,58 @@ export default function ResetPassword() {
     checkToken();
   }, []);
 
+  // Password validation
+  const validatePassword = (pwd: string): string | undefined => {
+    if (!pwd) return "Password is required";
+    if (pwd.length < 8) return "Password must be at least 8 characters";
+    return undefined;
+  };
+
+  // Confirm password validation
+  const validateConfirmPassword = (confirmPwd: string): string | undefined => {
+    if (!confirmPwd) return "Please confirm your password";
+    if (confirmPwd !== password) return "Passwords do not match";
+    return undefined;
+  };
+
+  // Password strength calculation
+  const getPasswordStrength = (pwd: string): { strength: number; label: string; color: string } => {
+    let strength = 0;
+    if (pwd.length >= 8) strength++;
+    if (pwd.length >= 12) strength++;
+    if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) strength++;
+    if (/\d/.test(pwd)) strength++;
+    if (/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) strength++;
+
+    if (strength <= 2) return { strength: 33, label: "Weak", color: "red" };
+    if (strength <= 3) return { strength: 66, label: "Medium", color: "yellow" };
+    return { strength: 100, label: "Strong", color: "green" };
+  };
+
+  const passwordError = touched.password ? validatePassword(password) : undefined;
+  const confirmError = touched.confirmPassword ? validateConfirmPassword(confirmPassword) : undefined;
+  const passwordStrength = password ? getPasswordStrength(password) : null;
+  const isFormValid = !validatePassword(password) && !validateConfirmPassword(confirmPassword);
+
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("🔐 Password reset submission started");
     setError("");
 
+    // Mark all as touched
+    setTouched({ password: true, confirmPassword: true });
+
     // Validation
-    if (!password || !confirmPassword) {
-      setError("Please fill in all fields");
+    const pwdError = validatePassword(password);
+    const confError = validateConfirmPassword(confirmPassword);
+
+    if (pwdError) {
+      setError(pwdError);
       return;
     }
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    if (confError) {
+      setError(confError);
       return;
     }
 
@@ -440,7 +475,11 @@ export default function ResetPassword() {
                       placeholder="Enter new password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-11 pr-11 bg-white/5 border-white/10 text-white placeholder:text-gray-500 transition-all duration-300 focus:ring-2 focus:ring-purple-500/50"
+                      onBlur={() => setTouched(prev => ({ ...prev, password: true }))}
+                      className={`pl-11 pr-11 bg-white/5 border-white/10 text-white placeholder:text-gray-500 transition-all duration-300 focus:ring-2 focus:ring-purple-500/50 ${
+                        passwordError ? "border-red-500 focus:ring-red-500/50" : 
+                        touched.password && !passwordError ? "border-green-500" : ""
+                      }`}
                       required
                     />
                     <button
@@ -451,6 +490,47 @@ export default function ResetPassword() {
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
+                  {passwordError && touched.password && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-red-400 text-sm flex items-center gap-1"
+                    >
+                      <AlertCircle className="w-4 h-4" />
+                      {passwordError}
+                    </motion.p>
+                  )}
+                  {/* Password Strength Indicator */}
+                  {password && passwordStrength && !passwordError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Password Strength:</span>
+                        <span className={`font-semibold ${
+                          passwordStrength.color === "green" ? "text-green-400" :
+                          passwordStrength.color === "yellow" ? "text-yellow-400" :
+                          "text-red-400"
+                        }`}>
+                          {passwordStrength.label}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${passwordStrength.strength}%` }}
+                          transition={{ duration: 0.3 }}
+                          className={`h-full ${
+                            passwordStrength.color === "green" ? "bg-green-500" :
+                            passwordStrength.color === "yellow" ? "bg-yellow-500" :
+                            "bg-red-500"
+                          }`}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
                 </motion.div>
 
                 <motion.div variants={itemVariants} className="space-y-2">
@@ -465,27 +545,46 @@ export default function ResetPassword() {
                       placeholder="Re-enter new password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="pl-11 pr-11 bg-white/5 border-white/10 text-white placeholder:text-gray-500 transition-all duration-300 focus:ring-2 focus:ring-purple-500/50"
+                      onBlur={() => setTouched(prev => ({ ...prev, confirmPassword: true }))}
+                      className={`pl-11 pr-11 bg-white/5 border-white/10 text-white placeholder:text-gray-500 transition-all duration-300 focus:ring-2 focus:ring-purple-500/50 ${
+                        confirmError ? "border-red-500 focus:ring-red-500/50" : 
+                        touched.confirmPassword && !confirmError && confirmPassword ? "border-green-500" : ""
+                      }`}
                       required
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
-                    >
-                      {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                      {touched.confirmPassword && !confirmError && confirmPassword && (
+                        <CheckCircle2 className="w-5 h-5 text-green-400" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="text-gray-500 hover:text-white transition-colors"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
+                  {confirmError && touched.confirmPassword && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-red-400 text-sm flex items-center gap-1"
+                    >
+                      <AlertCircle className="w-4 h-4" />
+                      {confirmError}
+                    </motion.p>
+                  )}
                 </motion.div>
 
                 <motion.div
                   variants={itemVariants}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: isFormValid ? 1.02 : 1 }}
+                  whileTap={{ scale: isFormValid ? 0.98 : 1 }}
                 >
                   <Button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isLoading || !isFormValid}
                     className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-3 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading ? (

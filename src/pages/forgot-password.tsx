@@ -1,7 +1,7 @@
 import { SEO } from "@/components/SEO";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { TrendingUp, Mail, ArrowLeft, CheckCircle2, Shield } from "lucide-react";
+import { TrendingUp, Mail, ArrowLeft, CheckCircle2, Shield, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,22 +14,57 @@ export default function ForgotPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [error, setError] = useState("");
+  const [touched, setTouched] = useState(false);
 
   useEffect(() => {
     console.log("🔍 Forgot Password Page Mounted");
     setMounted(true);
   }, []);
 
+  // Email validation
+  const validateEmail = (email: string): string | undefined => {
+    if (!email) return "Email is required";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return "Please enter a valid email address";
+    return undefined;
+  };
+
+  const emailError = touched ? validateEmail(email) : undefined;
+  const isFormValid = !validateEmail(email);
+
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("🔐 Password reset requested for:", email);
+    
+    // Mark as touched for validation
+    setTouched(true);
+    setError("");
+
+    // Validate email
+    const validationError = validateEmail(email);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setIsLoading(true);
 
     const { error } = await authService.resetPassword(email);
 
     if (error) {
       console.error("❌ Password reset error:", error);
-      alert(error.message);
+      
+      // Handle rate limiting
+      if (error.message?.includes("rate limit") || error.message?.includes("too many")) {
+        setError("Too many reset attempts. Please wait a few minutes and try again.");
+      } else if (error.message?.includes("not found")) {
+        // Security: Don't reveal if email exists or not
+        console.log("✅ Email not found, but showing success for security");
+        setIsSent(true);
+      } else {
+        setError(error.message || "Failed to send reset email. Please try again.");
+      }
       setIsLoading(false);
     } else {
       console.log("✅ Password reset email sent successfully");
@@ -259,6 +294,18 @@ export default function ForgotPassword() {
                 </div>
               </motion.div>
 
+              {/* Error Message */}
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex gap-3"
+                >
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-red-200 text-sm">{error}</p>
+                </motion.div>
+              )}
+
               {/* Form */}
               <form onSubmit={handleReset} className="space-y-4">
                 <motion.div variants={itemVariants} className="space-y-2">
@@ -273,10 +320,33 @@ export default function ForgotPassword() {
                       placeholder="admin@sui24.trade"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-11 bg-white/5 border-white/10 text-white placeholder:text-gray-500 transition-all duration-300 focus:ring-2 focus:ring-purple-500/50"
+                      onBlur={() => setTouched(true)}
+                      className={`pl-11 bg-white/5 border-white/10 text-white placeholder:text-gray-500 transition-all duration-300 focus:ring-2 focus:ring-purple-500/50 ${
+                        emailError ? "border-red-500 focus:ring-red-500/50" : 
+                        touched && isFormValid ? "border-green-500" : ""
+                      }`}
                       required
                     />
+                    {touched && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {emailError ? (
+                          <AlertCircle className="w-5 h-5 text-red-400" />
+                        ) : isFormValid ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-400" />
+                        ) : null}
+                      </div>
+                    )}
                   </div>
+                  {emailError && touched && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-red-400 text-sm flex items-center gap-1"
+                    >
+                      <AlertCircle className="w-4 h-4" />
+                      {emailError}
+                    </motion.p>
+                  )}
                 </motion.div>
 
                 <motion.div
@@ -286,7 +356,7 @@ export default function ForgotPassword() {
                 >
                   <Button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isLoading || !isFormValid}
                     className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-3 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading ? (
