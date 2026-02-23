@@ -1,5 +1,5 @@
 import { SEO } from "@/components/SEO";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,10 +16,23 @@ export default function AdminSetup() {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [setupComplete, setSetupComplete] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
 
+  useEffect(() => {
+    console.log("🔍 Admin Setup Page Mounted");
+    setMounted(true);
+    console.log("📊 Initial state:", { setupComplete, loading, mounted: true });
+  }, []);
+
+  useEffect(() => {
+    console.log("🔄 Setup complete changed:", setupComplete);
+  }, [setupComplete]);
+
   const createAdminAccount = async () => {
+    console.log("🚀 Create admin account started");
+    
     if (!email || !password || !fullName) {
       toast({
         title: "Missing Information",
@@ -51,6 +64,7 @@ export default function AdminSetup() {
 
     try {
       // Step 1: Create Supabase Auth account
+      console.log("⏳ Step 1: Creating Supabase Auth account...");
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -61,12 +75,19 @@ export default function AdminSetup() {
         },
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error("Failed to create user");
+      if (authError) {
+        console.error("❌ Auth error:", authError);
+        throw authError;
+      }
+      if (!authData.user) {
+        console.error("❌ No user returned from signUp");
+        throw new Error("Failed to create user");
+      }
 
       console.log("✅ Step 1: Auth account created:", authData.user.id);
 
       // Step 2: Update profile to master_admin role
+      console.log("⏳ Step 2: Updating profile to master_admin...");
       const { error: profileError } = await (supabase as any)
         .from("profiles")
         .update({
@@ -76,13 +97,14 @@ export default function AdminSetup() {
         .eq("id", authData.user.id);
 
       if (profileError) {
-        console.error("Profile update error:", profileError);
+        console.error("❌ Profile update error:", profileError);
         throw profileError;
       }
 
       console.log("✅ Step 2: Profile updated to master_admin");
 
       // Step 3: Create or update users table entry
+      console.log("⏳ Step 3: Creating users table entry...");
       const referralCode = `ADMIN${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       
       const { error: usersError } = await (supabase as any)
@@ -94,13 +116,14 @@ export default function AdminSetup() {
         });
 
       if (usersError) {
-        console.error("Users table error:", usersError);
+        console.error("❌ Users table error:", usersError);
         throw usersError;
       }
 
       console.log("✅ Step 3: Users table entry created");
 
       // Step 4: Initialize wallets
+      console.log("⏳ Step 4: Initializing wallets...");
       const { error: walletsError } = await (supabase as any)
         .from("wallets")
         .upsert({
@@ -112,11 +135,12 @@ export default function AdminSetup() {
         });
 
       if (walletsError) {
-        console.error("Wallets error:", walletsError);
+        console.error("❌ Wallets error:", walletsError);
         throw walletsError;
       }
 
       console.log("✅ Step 4: Wallets initialized");
+      console.log("🎉 Admin account creation complete!");
 
       setSetupComplete(true);
 
@@ -127,6 +151,7 @@ export default function AdminSetup() {
 
       // Redirect to login after 3 seconds
       setTimeout(() => {
+        console.log("🔄 Redirecting to login...");
         router.push("/login");
       }, 3000);
 
@@ -141,6 +166,11 @@ export default function AdminSetup() {
       setLoading(false);
     }
   };
+
+  // Don't render until mounted (prevents hydration issues)
+  if (!mounted) {
+    return null;
+  }
 
   if (setupComplete) {
     return (
