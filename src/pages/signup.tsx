@@ -25,34 +25,59 @@ export default function Signup() {
   const [referralCodeStatus, setReferralCodeStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [referralCodeError, setReferralCodeError] = useState("");
   const [isReferralLocked, setIsReferralLocked] = useState(false);
+  const [isFirstUser, setIsFirstUser] = useState(false);
 
   useEffect(() => {
-    // Get referral code from URL
+    const checkFirstUser = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .neq('role', 'admin')
+          .neq('role', 'master_admin');
+
+        if (error) {
+          console.error("Error checking user count:", error);
+          return;
+        }
+
+        setIsFirstUser(count === 0);
+      } catch (error) {
+        console.error("Exception checking first user:", error);
+      }
+    };
+
+    checkFirstUser();
+  }, []);
+
+  useEffect(() => {
     const ref = router.query.ref as string;
     if (ref) {
       setFormData(prev => ({ ...prev, referralCode: ref.toUpperCase() }));
-      setIsReferralLocked(true); // Lock the field when coming from referral link
+      setIsReferralLocked(true);
     }
   }, [router.query]);
 
-  // Real-time referral code validation
   useEffect(() => {
     const referralCode = formData.referralCode;
     
-    // Allow empty referral code (will use admin default)
-    if (!referralCode || referralCode.trim().length === 0) {
+    if (isFirstUser) {
       setReferralCodeStatus('idle');
       setReferralCodeError("");
       return;
     }
 
-    // Debounce the validation check
+    if (!referralCode || referralCode.trim().length === 0) {
+      setReferralCodeStatus('idle');
+      setReferralCodeError("Referral code is required");
+      return;
+    }
+
     const timeoutId = setTimeout(async () => {
       setReferralCodeStatus('checking');
       setReferralCodeError("");
 
       try {
-        // Check if referral code exists in profiles table
         const { data, error } = await supabase
           .from('profiles')
           .select('id, email')
@@ -78,10 +103,10 @@ export default function Signup() {
         setReferralCodeStatus('invalid');
         setReferralCodeError("Error validating referral code");
       }
-    }, 500); // Wait 500ms after user stops typing
+    }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [formData.referralCode]);
+  }, [formData.referralCode, isFirstUser]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,18 +119,25 @@ export default function Signup() {
     setIsLoading(true);
 
     try {
-      // Use admin's referral code as default if none provided
       const DEFAULT_ADMIN_REFERRAL = "SUI406086";
-      const referralCodeToUse = formData.referralCode.trim() || DEFAULT_ADMIN_REFERRAL;
+      let referralCodeToUse = formData.referralCode.trim();
 
-      // Validate if user provided a code (non-empty)
-      if (formData.referralCode.trim() && referralCodeStatus !== 'valid') {
-        alert("Please enter a valid referral code or leave empty for admin referral");
-        setIsLoading(false);
-        return;
+      if (isFirstUser) {
+        referralCodeToUse = DEFAULT_ADMIN_REFERRAL;
+      } else {
+        if (!referralCodeToUse) {
+          alert("Referral code is required");
+          setIsLoading(false);
+          return;
+        }
+        
+        if (referralCodeStatus !== 'valid') {
+          alert("Please enter a valid referral code");
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // 1. Get Referrer ID
       const { data: referrer, error: refError } = await supabase
         .from("profiles")
         .select("id")
@@ -118,11 +150,10 @@ export default function Signup() {
         return;
       }
 
-      // 2. Sign up with Supabase Auth
       const { error } = await authService.signUp(
         formData.email, 
         formData.password, 
-        referralCodeToUse, // Use the referral code (admin or provided)
+        referralCodeToUse,
         {
           full_name: formData.username,
           referral_code: referralCodeToUse,
@@ -242,57 +273,65 @@ export default function Signup() {
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="referralCode" className="text-gray-300">
-                  Referral Code <span className="text-gray-400">(Optional)</span>
-                  {isReferralLocked && (
-                    <span className="ml-2 text-xs text-purple-400">(Auto-filled from link)</span>
-                  )}
-                </Label>
-                <div className="relative mt-2">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                  <Input
-                    id="referralCode"
-                    type="text"
-                    placeholder="Leave empty for admin referral"
-                    value={formData.referralCode}
-                    onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
-                    className={`pl-11 pr-11 bg-slate-950 text-white ${
-                      isReferralLocked 
-                        ? 'border-purple-500/50 cursor-not-allowed opacity-80' 
-                        : 'border-purple-500/30'
-                    } ${
-                      referralCodeStatus === 'valid' ? 'border-green-500/50' : 
-                      referralCodeStatus === 'invalid' ? 'border-red-500/50' : ''
-                    }`}
-                    disabled={isLoading}
-                    readOnly={isReferralLocked}
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    {referralCodeStatus === 'checking' && (
-                      <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+              {!isFirstUser && (
+                <div>
+                  <Label htmlFor="referralCode" className="text-gray-300">
+                    Referral Code <span className="text-red-400">*</span>
+                    {isReferralLocked && (
+                      <span className="ml-2 text-xs text-purple-400">(Auto-filled from link)</span>
                     )}
-                    {referralCodeStatus === 'valid' && (
-                      <Check className="w-5 h-5 text-green-400" />
-                    )}
-                    {referralCodeStatus === 'invalid' && (
-                      <X className="w-5 h-5 text-red-400" />
-                    )}
+                  </Label>
+                  <div className="relative mt-2">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <Input
+                      id="referralCode"
+                      type="text"
+                      placeholder="Enter referral code"
+                      value={formData.referralCode}
+                      onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
+                      className={`pl-11 pr-11 bg-slate-950 text-white ${
+                        isReferralLocked 
+                          ? 'border-purple-500/50 cursor-not-allowed opacity-80' 
+                          : 'border-purple-500/30'
+                      } ${
+                        referralCodeStatus === 'valid' ? 'border-green-500/50' : 
+                        referralCodeStatus === 'invalid' ? 'border-red-500/50' : ''
+                      }`}
+                      disabled={isLoading}
+                      readOnly={isReferralLocked}
+                      required
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {referralCodeStatus === 'checking' && (
+                        <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+                      )}
+                      {referralCodeStatus === 'valid' && (
+                        <Check className="w-5 h-5 text-green-400" />
+                      )}
+                      {referralCodeStatus === 'invalid' && (
+                        <X className="w-5 h-5 text-red-400" />
+                      )}
+                    </div>
                   </div>
+                  {isReferralLocked && (
+                    <p className="text-purple-400 text-sm mt-1">🔒 Referral code locked from your invite link</p>
+                  )}
+                  {referralCodeError && !isReferralLocked && formData.referralCode && (
+                    <p className="text-red-400 text-sm mt-1">{referralCodeError}</p>
+                  )}
+                  {referralCodeStatus === 'valid' && !isReferralLocked && (
+                    <p className="text-green-400 text-sm mt-1">✓ Valid referral code</p>
+                  )}
                 </div>
-                {isReferralLocked && (
-                  <p className="text-purple-400 text-sm mt-1">🔒 Referral code locked from your invite link</p>
-                )}
-                {!formData.referralCode && !isReferralLocked && (
-                  <p className="text-gray-400 text-sm mt-1">💡 Admin will be your default sponsor</p>
-                )}
-                {referralCodeError && !isReferralLocked && formData.referralCode && (
-                  <p className="text-red-400 text-sm mt-1">{referralCodeError}</p>
-                )}
-                {referralCodeStatus === 'valid' && !isReferralLocked && (
-                  <p className="text-green-400 text-sm mt-1">✓ Valid referral code</p>
-                )}
-              </div>
+              )}
+
+              {isFirstUser && (
+                <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                  <p className="text-purple-300 text-sm">
+                    🎉 <strong>First User Signup!</strong> You will be automatically assigned to admin's referral tree.
+                  </p>
+                </div>
+              )}
 
               <Button 
                 type="submit"
