@@ -90,14 +90,18 @@ export async function getUserDownlineCount(userId: string) {
 
 // Get user's referral tree (direct referrals for now)
 export async function getReferralTree(userId: string) {
-  // Cast to any to avoid deep type instantiation errors
-  const { data, error } = await (supabase
-    .from("profiles")
-    .select("id, username, full_name, created_at, kyc_status, star_rank, total_investment, total_earnings")
-    .eq("referred_by", userId) as any);
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("referred_by", userId);
 
-  if (error) throw error;
-  return data;
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Get referral tree error:", error);
+    return [];
+  }
 }
 
 // Check if user has active package

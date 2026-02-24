@@ -130,23 +130,28 @@ export default function Signup() {
       }
 
       // Sign up with optional referral code
-      const { error } = await authService.signUp(
-        formData.email,
-        formData.password,
-        formData.username,
-        formData.referralCode?.trim() || undefined // Pass undefined if empty
-      );
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            username: formData.username,
+            full_name: formData.username, // Use username as full name initially
+            referral_code: formData.referralCode?.trim() || undefined,
+          },
+        },
+      });
 
       if (error) {
         alert(error.message);
       } else {
-        // TEMPORARY: Email verification bypassed
+        // TEMPORARY: Email verification bypassed or handled
         alert("Signup successful! You can now login immediately.");
         router.push("/login");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Signup error:", error);
-      alert("An error occurred during signup");
+      alert("An error occurred during signup: " + (error.message || "Unknown error"));
     } finally {
       setIsLoading(false);
     }

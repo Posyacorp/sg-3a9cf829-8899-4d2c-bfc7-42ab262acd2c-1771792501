@@ -5,6 +5,7 @@ import { useRouter } from "next/router";
 import { adminService } from "@/services/adminService";
 import { authService } from "@/services/authService";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { exportToCSV, exportToPDF, exportMultipleToCSV, exportChartToPDF } from "@/lib/exportUtils";
 import {
   Users,
@@ -78,6 +79,14 @@ type Period = "24h" | "7d" | "30d" | "90d" | "1y";
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const { toast } = useToast();
+  
+  // Pagination and Search states
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState("");
+
   const [selectedPeriod, setSelectedPeriod] = useState<Period>("7d");
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showUserModal, setShowUserModal] = useState(false);
