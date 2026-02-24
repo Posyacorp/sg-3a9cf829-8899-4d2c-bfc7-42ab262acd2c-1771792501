@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 
@@ -29,20 +28,6 @@ const getURL = () => {
   
   return url
 }
-
-// Network diagnostic helper
-const diagnoseNetworkError = (error: any): string => {
-  if (error.message?.includes('fetch')) {
-    return "Network error: Unable to connect to authentication server. Please check your internet connection.";
-  }
-  if (error.message?.includes('CORS')) {
-    return "CORS error: Authentication server configuration issue.";
-  }
-  if (error.message?.includes('timeout')) {
-    return "Request timeout: Authentication server took too long to respond.";
-  }
-  return error.message || "An unexpected error occurred";
-};
 
 export const authService = {
   // Get current user
@@ -85,225 +70,65 @@ export const authService = {
   },
 
   // Sign up with email and password
-  async signUp(email: string, password: string, username: string, referralCode?: string, metadata?: any): Promise<{ user: AuthUser | null; error: AuthError | null }> {
-    try {
-      // Generate referral code for new user
-      const newUserReferralCode = `SUI${Math.floor(100000 + Math.random() * 900000)}`;
+  async signUp(email: string, password: string, username: string, fullName: string, referralCode?: string) {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username,
+          full_name: fullName,
+        },
+      },
+    });
 
-      // Find referrer if referral code provided
-      let referrerId: string | undefined;
-      if (referralCode && referralCode.trim()) {
-        const { data: referrer } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('referral_code', referralCode.trim())
-          .maybeSingle();
-        
-        referrerId = referrer?.id;
+    if (authError) throw authError;
+
+    if (authData.user) {
+      // Create profile
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+          id: authData.user.id,
+          email,
+          username,
+          full_name: fullName,
+          referral_code: Math.random().toString(36).substring(7).toUpperCase(),
+          referred_by: referralCode ? await this.getUserIdByReferralCode(referralCode) : null,
+          role: 'user',
+          status: true // is_active
+        } as any);
+
+      if (profileError) {
+        console.error("Profile creation error:", profileError);
+        // Continue to create wallets even if profile fails (can be fixed later)
       }
 
-      // TEMPORARY: Email verification bypass (remove when Resend DNS is configured)
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { 
-            ...metadata, 
-            referral_code: newUserReferralCode,
-            username,
-            referred_by: referrerId 
-          },
-          emailRedirectTo: undefined // TEMPORARY: Skip email confirmation
-        }
-      });
+      // Create wallets
+      const walletTypes = ['main', 'roi', 'earning', 'p2p'];
+      const walletInserts = walletTypes.map(type => ({
+        user_id: authData.user!.id,
+        wallet_type: type,
+        balance: 0,
+        locked_balance: 0
+      }));
 
-      if (error) {
-        return { user: null, error: { message: error.message, code: error.status?.toString() } };
-      }
+      const { error: walletError } = await supabase
+        .from("wallets")
+        .insert(walletInserts);
 
-      const authUser = data.user ? {
-        id: data.user.id,
-        email: data.user.email || "",
-        user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
-      } : null;
-
-      if (data.user) {
-        // Create profile entry
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: data.user.id,
-            email: email,
-            username: username,
-            referral_code: newUserReferralCode,
-            referred_by: referrerId,
-            role: 'user',
-            status: 'active'
-          }, { onConflict: 'id' });
-
-        // Create users table entry
-        const { error: userError } = await supabase
-          .from('users')
-          .upsert({
-            id: data.user.id,
-            email: email,
-            full_name: username,
-            referral_code: newUserReferralCode,
-            referred_by: referrerId,
-            account_status: 'active'
-          }, { onConflict: 'id' });
-
-        // Create wallet entry
-        const { error: walletError } = await supabase
-          .from('wallets')
-          .upsert({
-            user_id: data.user.id,
-            main_balance: 0,
-            roi_balance: 0,
-            earning_balance: 0,
-            p2p_balance: 0
-          }, { onConflict: 'user_id' });
-          
-        if (profileError) console.error("Profile creation error:", profileError);
-        if (userError) console.error("User creation error:", userError);
-        if (walletError) console.error("Wallet creation error:", walletError);
-      }
-
-      return { user: authUser, error: null };
-    } catch (error) {
-      console.error("Sign up error:", error);
-      return { 
-        user: null, 
-        error: { message: "An unexpected error occurred during sign up" } 
-      };
+      if (walletError) console.error("Wallet creation error:", walletError);
     }
+
+    return authData;
   },
 
-  // Sign in with email and password - with retry logic
-  async signIn(email: string, password: string, retries = 2): Promise<{ user: AuthUser | null; error: AuthError | null }> {
-    try {
-      console.log("Attempting login for:", email);
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        console.error("Login error from Supabase:", error);
-        
-        // Retry on network errors
-        if (retries > 0 && error.message?.toLowerCase().includes('fetch')) {
-          console.log(`Retrying login... (${retries} attempts remaining)`);
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-          return this.signIn(email, password, retries - 1);
-        }
-        
-        return { 
-          user: null, 
-          error: { 
-            message: diagnoseNetworkError(error),
-            code: error.status?.toString() 
-          } 
-        };
-      }
-
-      if (!data.user) {
-        return {
-          user: null,
-          error: { message: "Login failed - no user data returned" }
-        };
-      }
-
-      const authUser: AuthUser = {
-        id: data.user.id,
-        email: data.user.email || "",
-        user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
-      };
-
-      // Ensure profile exists after successful login
-      try {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', data.user.id)
-          .maybeSingle();
-
-        if (profileError) {
-          console.warn("Profile check error:", profileError);
-        }
-
-        // Create profile if it doesn't exist
-        if (!profileData) {
-          console.log("Profile not found, creating...");
-          const { error: createError } = await supabase
-            .from('profiles')
-            .upsert({
-              id: data.user.id,
-              email: data.user.email || email,
-              referral_code: data.user.user_metadata?.referral_code || `SUI${Math.floor(100000 + Math.random() * 900000)}`,
-              role: 'user',
-              status: 'active'
-            }, { onConflict: 'id' });
-
-          if (createError) {
-            console.error("Profile creation error:", createError);
-          }
-        }
-
-        // Ensure users table entry exists
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('id', data.user.id)
-          .maybeSingle();
-
-        if (userError) {
-          console.warn("Users table check error:", userError);
-        }
-
-        if (!userData) {
-          console.log("Users table entry not found, creating...");
-          const { error: createUserError } = await supabase
-            .from('users')
-            .upsert({
-              id: data.user.id,
-              email: data.user.email || email,
-              referral_code: data.user.user_metadata?.referral_code || `SUI${Math.floor(100000 + Math.random() * 900000)}`,
-              account_status: 'active'
-            }, { onConflict: 'id' });
-
-          if (createUserError) {
-            console.error("Users table creation error:", createUserError);
-          }
-        }
-      } catch (profileException) {
-        console.error("Profile/User creation exception:", profileException);
-        // Don't fail the login if profile creation fails
-      }
-
-      console.log("Login successful for:", email);
-      return { user: authUser, error: null };
-      
-    } catch (error: any) {
-      console.error("Sign in exception:", error);
-      
-      // Retry on network exceptions
-      if (retries > 0 && (error.message?.includes('fetch') || error.message?.includes('network'))) {
-        console.log(`Retrying login after exception... (${retries} attempts remaining)`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return this.signIn(email, password, retries - 1);
-      }
-      
-      return { 
-        user: null, 
-        error: { 
-          message: diagnoseNetworkError(error)
-        } 
-      };
-    }
+  // Sign in with email and password
+  async signIn(email: string, password: string) {
+    return await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
   },
 
   // Sign out
@@ -333,129 +158,6 @@ export const authService = {
     }
   },
 
-  // Reset password
-  async resetPassword(email: string): Promise<{ error: AuthError | null }> {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${getURL()}reset-password`,
-      });
-
-      if (error) {
-        return { error: { message: error.message } };
-      }
-
-      return { error: null };
-    } catch (error) {
-      console.error("Reset password error:", error);
-      return { 
-        error: { message: "An unexpected error occurred during password reset" } 
-      };
-    }
-  },
-
-  // Update password (for password reset flow)
-  async updatePassword(newPassword: string): Promise<{ error: AuthError | null }> {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-
-      if (error) {
-        return { error: { message: error.message } };
-      }
-
-      return { error: null };
-    } catch (error) {
-      console.error("Update password error:", error);
-      return { 
-        error: { message: "An unexpected error occurred while updating password" } 
-      };
-    }
-  },
-
-  // Confirm email (REQUIRED)
-  async confirmEmail(token: string, type: 'signup' | 'recovery' | 'email_change' = 'signup'): Promise<{ user: AuthUser | null; error: AuthError | null }> {
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        token_hash: token,
-        type: type
-      });
-
-      if (error) {
-        return { user: null, error: { message: error.message, code: error.status?.toString() } };
-      }
-
-      const authUser = data.user ? {
-        id: data.user.id,
-        email: data.user.email || "",
-        user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
-      } : null;
-
-      return { user: authUser, error: null };
-    } catch (error) {
-      console.error("Confirm email error:", error);
-      return { 
-        user: null, 
-        error: { message: "An unexpected error occurred during email confirmation" } 
-      };
-    }
-  },
-
-  // Listen to auth state changes
-  onAuthStateChange(callback: (event: string, session: Session | null) => void) {
-    return supabase.auth.onAuthStateChange(callback);
-  },
-
-  // Sign up with email/password
-  async signUp(email: string, password: string, username: string, fullName: string, referralCode?: string) {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username,
-          full_name: fullName,
-        },
-      },
-    });
-
-    if (authError) throw authError;
-
-    if (authData.user) {
-      // Create profile
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert({
-          id: authData.user.id,
-          email,
-          username,
-          full_name: fullName,
-          referral_code: Math.random().toString(36).substring(7).toUpperCase(), // Generate random code
-          referred_by: referralCode ? await this.getUserIdByReferralCode(referralCode) : null,
-        });
-
-      if (profileError) throw profileError;
-
-      // Create wallets
-      const walletTypes = ['main', 'roi', 'earning', 'p2p'];
-      const walletInserts = walletTypes.map(type => ({
-        user_id: authData.user!.id,
-        wallet_type: type,
-        balance: 0,
-        locked_balance: 0
-      }));
-
-      const { error: walletError } = await supabase
-        .from("wallets")
-        .insert(walletInserts);
-
-      if (walletError) throw walletError;
-    }
-
-    return authData;
-  },
-
   async getUserIdByReferralCode(code: string) {
     const { data, error } = await supabase
       .from("profiles")
@@ -465,5 +167,10 @@ export const authService = {
     
     if (error || !data) return null;
     return data.id;
+  },
+
+  // Listen to auth state changes
+  onAuthStateChange(callback: (event: string, session: Session | null) => void) {
+    return supabase.auth.onAuthStateChange(callback);
   }
 };

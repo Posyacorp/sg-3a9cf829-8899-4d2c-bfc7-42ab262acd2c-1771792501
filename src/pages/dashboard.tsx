@@ -93,14 +93,22 @@ export default function Dashboard() {
     if (!user) return;
 
     // 1. Get Wallet Balances
-    const walletRes = await walletService.getUserWallet(user.id);
+    const walletRes = await walletService.getUserWallets(user.id);
     let totalBalance = 0;
-    if (walletRes.success && walletRes.wallet) {
+    if (walletRes.map) {
+      const w = walletRes.map;
+      setWallets({
+        main: w.main?.balance || 0,
+        roi: w.roi?.balance || 0,
+        earning: w.earning?.balance || 0,
+        p2p: w.p2p?.balance || 0
+      });
+      
       totalBalance = 
-        (walletRes.wallet.main_balance || 0) + 
-        (walletRes.wallet.roi_balance || 0) + 
-        (walletRes.wallet.earning_balance || 0) + 
-        (walletRes.wallet.p2p_balance || 0);
+        (w.main?.balance || 0) + 
+        (w.roi?.balance || 0) + 
+        (w.earning?.balance || 0) + 
+        (w.p2p?.balance || 0);
     }
 
     // 2. Get Active Packages

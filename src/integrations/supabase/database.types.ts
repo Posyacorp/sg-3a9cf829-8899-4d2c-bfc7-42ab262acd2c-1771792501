@@ -581,6 +581,7 @@ export type Database = {
           is_admin: boolean | null
           referral_code: string
           referred_by: string | null
+          role: string | null
           star_rank: number | null
           team_volume: number | null
           updated_at: string | null
@@ -596,6 +597,7 @@ export type Database = {
           is_admin?: boolean | null
           referral_code: string
           referred_by?: string | null
+          role?: string | null
           star_rank?: number | null
           team_volume?: number | null
           updated_at?: string | null
@@ -611,6 +613,7 @@ export type Database = {
           is_admin?: boolean | null
           referral_code?: string
           referred_by?: string | null
+          role?: string | null
           star_rank?: number | null
           team_volume?: number | null
           updated_at?: string | null
