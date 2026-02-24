@@ -85,18 +85,34 @@ export const authService = {
   },
 
   // Sign up with email and password
-  async signUp(email: string, password: string, referralCode?: string, metadata?: any): Promise<{ user: AuthUser | null; error: AuthError | null }> {
+  async signUp(email: string, password: string, username: string, referralCode?: string, metadata?: any): Promise<{ user: AuthUser | null; error: AuthError | null }> {
     try {
-      // Generate referral code if not provided
-      const code = referralCode || `SUI${Math.floor(100000 + Math.random() * 900000)}`;
+      // Generate referral code for new user
+      const newUserReferralCode = `SUI${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // Find referrer if referral code provided
+      let referrerId: string | undefined;
+      if (referralCode && referralCode.trim()) {
+        const { data: referrer } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('referral_code', referralCode.trim())
+          .maybeSingle();
+        
+        referrerId = referrer?.id;
+      }
 
       // TEMPORARY: Email verification bypass (remove when Resend DNS is configured)
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          // emailRedirectTo: `${getURL()}auth/confirm-email`, // DISABLED - Enable when email is ready
-          data: { ...metadata, referral_code: code },
+          data: { 
+            ...metadata, 
+            referral_code: newUserReferralCode,
+            username,
+            referred_by: referrerId 
+          },
           emailRedirectTo: undefined // TEMPORARY: Skip email confirmation
         }
       });
@@ -113,31 +129,45 @@ export const authService = {
       } : null;
 
       if (data.user) {
-        // Create profile entry if it doesn't exist (handling potential triggers)
+        // Create profile entry
         const { error: profileError } = await supabase
           .from('profiles')
           .upsert({
             id: data.user.id,
             email: email,
-            referral_code: code, // Use the generated/passed code
+            username: username,
+            referral_code: newUserReferralCode,
+            referred_by: referrerId,
             role: 'user',
             status: 'active'
           }, { onConflict: 'id' });
 
-        // CRITICAL: Create users table entry as it is referenced by wallets/transactions
+        // Create users table entry
         const { error: userError } = await supabase
           .from('users')
           .upsert({
             id: data.user.id,
             email: email,
-            referral_code: code, // Sync referral code
-            account_status: 'active',
-            // referred_by needs to be handled if we have the ID, but here we might only have code
-            // The metadata trigger might handle this, but being safe:
+            full_name: username,
+            referral_code: newUserReferralCode,
+            referred_by: referrerId,
+            account_status: 'active'
           }, { onConflict: 'id' });
+
+        // Create wallet entry
+        const { error: walletError } = await supabase
+          .from('wallets')
+          .upsert({
+            user_id: data.user.id,
+            main_balance: 0,
+            roi_balance: 0,
+            earning_balance: 0,
+            p2p_balance: 0
+          }, { onConflict: 'user_id' });
           
         if (profileError) console.error("Profile creation error:", profileError);
         if (userError) console.error("User creation error:", userError);
+        if (walletError) console.error("Wallet creation error:", walletError);
       }
 
       return { user: authUser, error: null };
@@ -277,20 +307,29 @@ export const authService = {
   },
 
   // Sign out
-  async signOut(): Promise<{ error: AuthError | null }> {
-    try {
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        return { error: { message: error.message } };
-      }
+  async signOut() {
+    return await supabase.auth.signOut();
+  },
 
-      return { error: null };
+  async validateReferralCode(code: string): Promise<boolean> {
+    if (!code) return false;
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('referral_code', code)
+        .maybeSingle();
+        
+      if (error) {
+        console.error("Error validating referral code:", error);
+        return false;
+      }
+      
+      return !!data;
     } catch (error) {
-      console.error("Sign out error:", error);
-      return { 
-        error: { message: "An unexpected error occurred during sign out" } 
-      };
+      console.error("Exception validating referral code:", error);
+      return false;
     }
   },
 

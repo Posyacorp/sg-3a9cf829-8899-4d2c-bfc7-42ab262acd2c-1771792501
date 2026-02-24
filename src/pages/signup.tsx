@@ -119,46 +119,22 @@ export default function Signup() {
     setIsLoading(true);
 
     try {
-      const DEFAULT_ADMIN_REFERRAL = "SUI406086";
-      let referralCodeToUse = formData.referralCode.trim();
-
-      if (isFirstUser) {
-        referralCodeToUse = DEFAULT_ADMIN_REFERRAL;
-      } else {
-        if (!referralCodeToUse) {
-          alert("Referral code is required");
-          setIsLoading(false);
-          return;
-        }
-        
-        if (referralCodeStatus !== 'valid') {
-          alert("Please enter a valid referral code");
+      // Only validate referral code if one is provided
+      if (formData.referralCode && formData.referralCode.trim()) {
+        const isValid = await authService.validateReferralCode(formData.referralCode);
+        if (!isValid) {
+          alert("Invalid referral code");
           setIsLoading(false);
           return;
         }
       }
 
-      const { data: referrer, error: refError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("referral_code", referralCodeToUse)
-        .single();
-
-      if (refError || !referrer) {
-        alert("Unable to find referrer. Please contact support.");
-        setIsLoading(false);
-        return;
-      }
-
+      // Sign up with optional referral code
       const { error } = await authService.signUp(
-        formData.email, 
-        formData.password, 
-        referralCodeToUse,
-        {
-          full_name: formData.username,
-          referral_code: referralCodeToUse,
-          referred_by: referrer.id
-        }
+        formData.email,
+        formData.password,
+        formData.username,
+        formData.referralCode?.trim() || undefined // Pass undefined if empty
       );
 
       if (error) {
@@ -168,9 +144,9 @@ export default function Signup() {
         alert("Signup successful! You can now login immediately.");
         router.push("/login");
       }
-    } catch (err) {
-      console.error(err);
-      alert("An unexpected error occurred.");
+    } catch (error) {
+      console.error("Signup error:", error);
+      alert("An error occurred during signup");
     } finally {
       setIsLoading(false);
     }
@@ -274,57 +250,36 @@ export default function Signup() {
                 </div>
               </div>
 
-              {!isFirstUser && (
-                <div>
-                  <Label htmlFor="referralCode" className="text-gray-300">
-                    Referral Code <span className="text-red-400">*</span>
-                    {isReferralLocked && (
-                      <span className="ml-2 text-xs text-purple-400">(Auto-filled from link)</span>
-                    )}
-                  </Label>
-                  <div className="relative mt-2">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                    <Input
-                      id="referralCode"
-                      type="text"
-                      placeholder="Enter referral code"
-                      value={formData.referralCode}
-                      onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
-                      className={`pl-11 pr-11 bg-slate-950 text-white ${
-                        isReferralLocked 
-                          ? 'border-purple-500/50 cursor-not-allowed opacity-80' 
-                          : 'border-purple-500/30'
-                      } ${
-                        referralCodeStatus === 'valid' ? 'border-green-500/50' : 
-                        referralCodeStatus === 'invalid' ? 'border-red-500/50' : ''
-                      }`}
-                      disabled={isLoading}
-                      readOnly={isReferralLocked}
-                      required
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      {referralCodeStatus === 'checking' && (
-                        <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
-                      )}
-                      {referralCodeStatus === 'valid' && (
-                        <Check className="w-5 h-5 text-green-400" />
-                      )}
-                      {referralCodeStatus === 'invalid' && (
-                        <X className="w-5 h-5 text-red-400" />
-                      )}
-                    </div>
-                  </div>
-                  {isReferralLocked && (
-                    <p className="text-purple-400 text-sm mt-1">🔒 Referral code locked from your invite link</p>
-                  )}
-                  {referralCodeError && !isReferralLocked && formData.referralCode && (
-                    <p className="text-red-400 text-sm mt-1">{referralCodeError}</p>
-                  )}
-                  {referralCodeStatus === 'valid' && !isReferralLocked && (
-                    <p className="text-green-400 text-sm mt-1">✓ Valid referral code</p>
-                  )}
-                </div>
-              )}
+              <div>
+                <Label htmlFor="referralCode">Referral Code (Optional)</Label>
+                <Input
+                  id="referralCode"
+                  type="text"
+                  placeholder="Enter referral code (leave blank if none)"
+                  value={formData.referralCode}
+                  onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
+                  className="bg-slate-950 border-purple-500/30 text-white uppercase"
+                  disabled={isReferralLocked}
+                />
+                {referralCodeStatus === 'checking' && (
+                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Checking referral code...
+                  </p>
+                )}
+                {referralCodeStatus === 'valid' && (
+                  <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Valid referral code
+                  </p>
+                )}
+                {referralCodeStatus === 'invalid' && referralCodeError && (
+                  <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                    <X className="w-3 h-3" />
+                    {referralCodeError}
+                  </p>
+                )}
+              </div>
 
               {isFirstUser && (
                 <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
