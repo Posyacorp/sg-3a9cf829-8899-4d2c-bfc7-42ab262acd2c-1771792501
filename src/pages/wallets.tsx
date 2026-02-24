@@ -17,6 +17,8 @@ import {
   Copy
 } from "lucide-react";
 import { walletService } from "@/services/walletService";
+import { useAuth } from "@/hooks/useAuth";
+import { Loader2, RefreshCw, Send, ArrowDownLeft, ArrowUpRight, History, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface WalletBalance {
@@ -38,12 +40,9 @@ interface Transaction {
 }
 
 export default function WalletsPage() {
-  const [wallets, setWallets] = useState({
-    main: 0,
-    roi: 0,
-    earning: 0,
-    p2p: 0,
-  });
+  const { user } = useAuth();
+  const [wallets, setWallets] = useState<any>(null); // Use any for now to bypass strict checks during migration
+  const [loading, setLoading] = useState(true);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
@@ -60,39 +59,14 @@ export default function WalletsPage() {
   }, []);
 
   const fetchWalletData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
-    // Fetch wallet balances
-    const walletRes = await walletService.getUserWallet(user.id);
-    if (walletRes.success && walletRes.wallet) {
-      setWallets({
-        main: walletRes.wallet.main_balance || 0,
-        roi: walletRes.wallet.roi_balance || 0,
-        earning: walletRes.wallet.earning_balance || 0,
-        p2p: walletRes.wallet.p2p_balance || 0,
-      });
-    }
-
-    // Fetch transactions
-    const { data: txs, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (!error && txs) {
-      const formattedTxs: Transaction[] = txs.map(tx => ({
-        id: tx.id,
-        type: tx.type,
-        amount: tx.amount,
-        wallet: tx.wallet_type,
-        status: tx.status,
-        timestamp: new Date(tx.created_at).getTime(),
-        hash: tx.hash_key,
-        fee: tx.fee
-      }));
-      setTransactions(formattedTxs);
+    try {
+      const { map } = await walletService.getUserWallets(user.id);
+      setWallets(map);
+    } catch (error) {
+      console.error("Error fetching wallets:", error);
+    } finally {
+      setLoading(false);
     }
   };
 

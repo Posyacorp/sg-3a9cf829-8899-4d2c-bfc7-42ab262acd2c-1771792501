@@ -16,7 +16,27 @@ export interface DashboardStats {
 // Admin User Management Service
 export const adminService = {
   // Get all users with pagination and filtering
-  async getAllUsers(page = 1, limit = 10, search = "") {
+  async getAllUsers(
+    optionsOrPage: any = 1, 
+    limitArg = 10, 
+    searchArg = ""
+  ) {
+    let page = 1;
+    let limit = 10;
+    let search = "";
+    
+    // Handle object argument (new style) vs positional arguments (old style)
+    if (typeof optionsOrPage === 'object') {
+      page = optionsOrPage.page || 1;
+      limit = optionsOrPage.limit || 10;
+      search = optionsOrPage.search || "";
+      // Add other filters logic here if needed
+    } else {
+      page = optionsOrPage;
+      limit = limitArg;
+      search = searchArg;
+    }
+
     let query = supabase
       .from("profiles")
       .select("*", { count: "exact" });
@@ -35,7 +55,7 @@ export const adminService = {
     if (error) throw error;
 
     return {
-      users: data,
+      users: data || [],
       total: count || 0,
       page,
       limit,
