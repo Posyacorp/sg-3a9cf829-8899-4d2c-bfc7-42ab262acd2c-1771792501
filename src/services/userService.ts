@@ -89,7 +89,7 @@ export async function getUserDownlineCount(userId: string) {
 }
 
 // Get user's referral tree (direct referrals for now)
-async getReferralTree(userId: string) {
+export async function getReferralTree(userId: string) {
   // Cast to any to avoid deep type instantiation errors
   const { data, error } = await (supabase
     .from("profiles")
