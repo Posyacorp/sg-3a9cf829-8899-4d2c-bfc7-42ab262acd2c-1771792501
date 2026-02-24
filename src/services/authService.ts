@@ -90,12 +90,14 @@ export const authService = {
       // Generate referral code if not provided
       const code = referralCode || `SUI${Math.floor(100000 + Math.random() * 900000)}`;
 
+      // TEMPORARY: Email verification bypass (remove when Resend DNS is configured)
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${getURL()}auth/confirm-email`,
-          data: { ...metadata, referral_code: code }
+          // emailRedirectTo: `${getURL()}auth/confirm-email`, // DISABLED - Enable when email is ready
+          data: { ...metadata, referral_code: code },
+          emailRedirectTo: undefined // TEMPORARY: Skip email confirmation
         }
       });
 

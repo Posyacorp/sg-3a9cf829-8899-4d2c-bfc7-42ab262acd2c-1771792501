@@ -164,7 +164,8 @@ export default function Signup() {
       if (error) {
         alert(error.message);
       } else {
-        alert("Signup successful! Please check your email to confirm your account.");
+        // TEMPORARY: Email verification bypassed
+        alert("Signup successful! You can now login immediately.");
         router.push("/login");
       }
     } catch (err) {
