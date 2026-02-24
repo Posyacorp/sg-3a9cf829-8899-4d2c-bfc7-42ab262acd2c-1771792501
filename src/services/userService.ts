@@ -91,9 +91,10 @@ export async function getUserDownlineCount(userId: string) {
 // Get user's referral tree (direct referrals for now)
 export async function getReferralTree(userId: string) {
   try {
+    // Select specific fields to avoid infinite recursion in types
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, full_name, email, created_at, is_active, star_rank, total_investment")
       .eq("referred_by", userId);
 
     if (error) throw error;
