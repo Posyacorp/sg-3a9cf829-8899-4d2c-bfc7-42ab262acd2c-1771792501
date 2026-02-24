@@ -116,13 +116,14 @@ export default function Dashboard() {
     const activePackages = packagesRes.success && packagesRes.packages ? packagesRes.packages.length : 0;
 
     // 3. Get Total Earnings (ROI + Commissions)
-    const { data: earnings } = await supabase
+    // Cast to any to avoid "excessively deep" type instantiation error with complex Supabase types
+    const { data: earnings } = await (supabase
       .from("transactions")
       .select("amount")
       .eq("user_id", user.id)
-      .in("type", ["roi_claim", "commission"]);
+      .in("transaction_type", ["roi_claim", "commission"]) as any);
     
-    const totalEarnings = earnings?.reduce((sum, tx) => sum + Number(tx.amount), 0) || 0;
+    const totalEarnings = earnings?.reduce((sum: number, tx: any) => sum + Number(tx.amount), 0) || 0;
 
     // 4. Get Team Size (Direct Referrals for now, recursive count would be better for full tree)
     const { count, data: profile } = await supabase

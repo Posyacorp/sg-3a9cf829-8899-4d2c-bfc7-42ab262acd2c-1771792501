@@ -133,22 +133,26 @@ export default function AdminDashboard() {
   const [presetStatusFilter, setPresetStatusFilter] = useState<"all" | "default" | "non-default">("all");
 
   const fetchUsers = async () => {
+    setLoading(true);
     try {
-      const filters = {
-        search: searchQuery,
-        status: statusFilter !== "all" ? statusFilter : undefined,
-        kycStatus: kycFilter !== "all" ? kycFilter : undefined,
-        starRank: rankFilter !== "all" ? rankFilter : undefined,
-        role: roleFilter !== "all" ? roleFilter : undefined,
-        dateRange: dateRangeFilter !== "all" ? dateRangeFilter : undefined,
-        sortBy,
-        sortOrder,
-      };
-      const users = await adminService.getAllUsers(filters);
-      setUsers(users);
-      setDetailedUsers(users);
+      const response = await adminService.getAllUsers({
+        page,
+        limit,
+        search,
+      });
+      // The service returns { users, total, page, limit, totalPages }
+      // We need to set the users array and the total count
+      setUsers(response.users);
+      setTotalPages(response.totalPages);
     } catch (error) {
       console.error("Error fetching users:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch users",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 

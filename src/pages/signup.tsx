@@ -110,13 +110,13 @@ export default function Signup() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setIsLoading(true);
+
     if (formData.password !== formData.confirmPassword) {
       alert("Passwords do not match");
+      setIsLoading(false);
       return;
     }
-
-    setIsLoading(true);
 
     try {
       // Only validate referral code if one is provided

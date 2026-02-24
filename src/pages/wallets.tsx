@@ -14,11 +14,14 @@ import {
   Send,
   Plus,
   TrendingUp,
-  Copy
+  Copy,
+  Loader2,
+  RefreshCw,
+  ArrowDownLeft,
+  History
 } from "lucide-react";
 import { walletService } from "@/services/walletService";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, RefreshCw, Send, ArrowDownLeft, ArrowUpRight, History, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface WalletBalance {
