@@ -136,6 +136,18 @@ export const authService = {
     return await supabase.auth.signOut();
   },
 
+  // Reset Password (send email)
+  async resetPassword(email: string) {
+    return await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${getURL()}reset-password`,
+    });
+  },
+
+  // Update Password (logged in or with token)
+  async updatePassword(password: string) {
+    return await supabase.auth.updateUser({ password });
+  },
+
   async validateReferralCode(code: string): Promise<boolean> {
     if (!code) return false;
     

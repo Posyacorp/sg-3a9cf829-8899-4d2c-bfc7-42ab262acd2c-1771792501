@@ -1,4 +1,4 @@
- 
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 export type Json =
   | string
   | number
@@ -572,50 +572,71 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
+          bio: string | null
           created_at: string | null
           email: string
+          email_notifications: boolean | null
           full_name: string | null
           id: string
           ip_address: string | null
           is_active: boolean | null
           is_admin: boolean | null
+          language: string | null
+          phone: string | null
           referral_code: string
           referred_by: string | null
           role: string | null
           star_rank: number | null
           team_volume: number | null
+          timezone: string | null
+          two_factor_enabled: boolean | null
           updated_at: string | null
           username: string
         }
         Insert: {
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
           email: string
+          email_notifications?: boolean | null
           full_name?: string | null
           id: string
           ip_address?: string | null
           is_active?: boolean | null
           is_admin?: boolean | null
+          language?: string | null
+          phone?: string | null
           referral_code: string
           referred_by?: string | null
           role?: string | null
           star_rank?: number | null
           team_volume?: number | null
+          timezone?: string | null
+          two_factor_enabled?: boolean | null
           updated_at?: string | null
           username: string
         }
         Update: {
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
           email?: string
+          email_notifications?: boolean | null
           full_name?: string | null
           id?: string
           ip_address?: string | null
           is_active?: boolean | null
           is_admin?: boolean | null
+          language?: string | null
+          phone?: string | null
           referral_code?: string
           referred_by?: string | null
           role?: string | null
           star_rank?: number | null
           team_volume?: number | null
+          timezone?: string | null
+          two_factor_enabled?: boolean | null
           updated_at?: string | null
           username?: string
         }

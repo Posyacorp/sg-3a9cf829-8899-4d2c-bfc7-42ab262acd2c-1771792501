@@ -36,6 +36,21 @@ export const packageService = {
     return data;
   },
 
+  // Alias for backward compatibility or convenience, returns object with success/packages
+  async getUserActivePackages(userId: string) {
+    try {
+      const data = await this.getUserPackages(userId);
+      const activePackages = data?.filter(p => p.status === 'active') || [];
+      return { 
+        success: true, 
+        packages: activePackages 
+      };
+    } catch (error) {
+      console.error("Error fetching active packages:", error);
+      return { success: false, error };
+    }
+  },
+
   // Purchase a package
   async purchasePackage(userId: string, packageId: string, amount: number) {
     // 1. Get package details
