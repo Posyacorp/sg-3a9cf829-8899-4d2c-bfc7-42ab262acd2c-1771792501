@@ -417,15 +417,6 @@ export default function Login() {
                 </Link>
               </p>
             </div>
-
-            {/* Admin Credentials Hint (for development only) */}
-            {process.env.NODE_ENV === "development" && (
-              <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                <p className="text-xs text-blue-400 font-semibold mb-2">🔐 Admin Login (Dev Mode):</p>
-                <p className="text-xs text-blue-300">Email: admin@sui24.trade</p>
-                <p className="text-xs text-blue-300">Password: Indiabulls@5aA</p>
-              </div>
-            )}
           </Card>
         </div>
       </div>
