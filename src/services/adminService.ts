@@ -1,115 +1,83 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+
+// Type definitions
+export type UserProfile = Database['public']['Tables']['profiles']['Row'];
+export type Wallet = Database['public']['Tables']['wallets']['Row'];
+export type Transaction = Database['public']['Tables']['transactions']['Row'];
+export type Package = Database['public']['Tables']['packages']['Row'];
+export type UserPackage = Database['public']['Tables']['user_packages']['Row'];
+
+export interface DashboardStats {
+  totalUsers: number;
+}
 
 // Admin User Management Service
 export const adminService = {
-  // Get all users with filters
-  async getAllUsers(filters?: {
-    search?: string;
-    status?: string;
-    kycStatus?: string;
-    starRank?: string;
-    role?: string;
-    dateRange?: string;
-    sortBy?: string;
-    sortOrder?: string;
-  }) {
-    try {
-      // Cast to any to avoid "Type instantiation is excessively deep" error with complex Supabase queries
-      let query: any = supabase
-        .from("profiles")
-        .select(`
-          *,
-          packages:user_packages(count),
-          total_deposits:transactions(amount.sum()).eq(type, 'deposit').eq(status, 'completed'),
-          total_withdrawals:transactions(amount.sum()).eq(type, 'withdrawal').eq(status, 'completed'),
-          direct_referrals:profiles(count).eq(referred_by, id)
-        `);
+  // Get all users with pagination and filtering
+  async getAllUsers(page = 1, limit = 10, search = "") {
+    let query = supabase
+      .from("profiles")
+      .select("*", { count: "exact" });
 
-      // Search filter
-      if (filters?.search) {
-        query = query.or(`full_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,username.ilike.%${filters.search}%,referral_code.ilike.%${filters.search}%`);
-      }
-
-      // Status filter
-      if (filters?.status && filters.status !== "all") {
-        query = query.eq("status", filters.status);
-      }
-
-      // KYC filter
-      if (filters?.kycStatus && filters.kycStatus !== "all") {
-        if (filters.kycStatus === "not_verified") {
-          query = query.or("kyc_status.is.null,kyc_status.eq.not_verified");
-        } else {
-          query = query.eq("kyc_status", filters.kycStatus);
-        }
-      }
-
-      // Star rank filter
-      if (filters?.starRank && filters.starRank !== "all") {
-        // Ensure starRank is passed as a number if the column is numeric
-        // If filters.starRank is a string like "1", this works if the DB expects a number (Supabase/PostgREST handles conversion mostly, but explicit is better)
-        query = query.eq("star_rank", parseInt(filters.starRank));
-      }
-
-      // Role filter
-      if (filters?.role && filters.role !== "all") {
-        query = query.eq("role", filters.role);
-      }
-
-      // Date range filter
-      if (filters?.dateRange && filters.dateRange !== "all") {
-        const now = new Date();
-        const startDate = new Date();
-        
-        switch (filters.dateRange) {
-          case "today":
-            startDate.setHours(0, 0, 0, 0);
-            break;
-          case "week":
-            startDate.setDate(now.getDate() - 7);
-            break;
-          case "month":
-            startDate.setMonth(now.getMonth() - 1);
-            break;
-          case "quarter":
-            startDate.setMonth(now.getMonth() - 3);
-            break;
-          case "year":
-            startDate.setFullYear(now.getFullYear() - 1);
-            break;
-        }
-        
-        query = query.gte("created_at", startDate.toISOString());
-      }
-
-      // Sorting
-      const sortBy = filters?.sortBy || "date";
-      const sortOrder = filters?.sortOrder || "desc";
-      
-      switch (sortBy) {
-        case "balance":
-          query = query.order("current_balance", { ascending: sortOrder === "asc" });
-          break;
-        case "team_volume":
-          query = query.order("team_volume", { ascending: sortOrder === "asc" });
-          break;
-        case "earnings":
-          query = query.order("total_commissions", { ascending: sortOrder === "asc" });
-          break;
-        default: // date
-          query = query.order("created_at", { ascending: sortOrder === "asc" });
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      return data || [];
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      throw error;
+    if (search) {
+      query = query.or(`email.ilike.%${search}%,username.ilike.%${search}%,full_name.ilike.%${search}%`);
     }
+
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data, error, count } = await query
+      .range(from, to)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return {
+      users: data,
+      total: count || 0,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit),
+    };
+  },
+
+  // Get user details by ID
+  async getUserById(userId: string) {
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (profileError) throw profileError;
+
+    // Get wallets
+    const { data: wallets, error: walletsError } = await supabase
+      .from("wallets")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (walletsError) throw walletsError;
+
+    return {
+      ...profile,
+      wallets: wallets || [],
+    };
+  },
+
+  // Update user profile
+  async updateUserProfile(userId: string, updates: Partial<UserProfile>) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .eq("id", userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
   },
 
   // Get single user details

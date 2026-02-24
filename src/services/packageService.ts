@@ -1,378 +1,67 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
-const ADMIN_SECRET_WALLET = "0xe7da79a7fea4ea3c8656c6d647a6bc31752d72c7";
+type Package = Database['public']['Tables']['packages']['Row'];
+type UserPackage = Database['public']['Tables']['user_packages']['Row'];
 
 export const packageService = {
-  // Get all active packages
-  async getAllPackages() {
-    try {
-      const { data, error } = await supabase
-        .from("packages")
-        .select("*")
-        .eq("is_active", true)
-        .order("min_deposit", { ascending: true });
+  // Get all available packages
+  async getPackages() {
+    const { data, error } = await supabase
+      .from("packages")
+      .select("*")
+      .eq("is_active", true)
+      .order("amount", { ascending: true });
 
-      if (error) return { success: false, error: error.message };
-      return { success: true, packages: data };
-    } catch (error: unknown) {
-      console.error("Get packages error:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Failed to get packages" };
-    }
-  },
-
-  // Get package by ID
-  async getPackageById(packageId: string) {
-    try {
-      const { data, error } = await supabase
-        .from("packages")
-        .select("*")
-        .eq("id", packageId)
-        .single();
-
-      if (error) return { success: false, error: error.message };
-      return { success: true, package: data };
-    } catch (error: unknown) {
-      console.error("Get package error:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Package not found" };
-    }
-  },
-
-  // Purchase package with 70/30 rule (This is the main function used)
-  async purchasePackage(data: {
-    packageId: string;
-    useInternalFunds: number; // Amount from internal wallets (max 70%)
-    freshDeposit: number; // Fresh deposit amount (min 30%)
-  }) {
-    return this.buyPackage(data.packageId, data.freshDeposit + data.useInternalFunds, data.useInternalFunds > 0);
-  },
-
-  // Unified buy package function
-  async buyPackage(
-    packageId: string,
-    amount: number,
-    useInternalFunds: boolean = false
-  ) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { success: false, message: "Not authenticated" };
-      const userId = user.id;
-
-      // Get package details
-      const { data: pkg, error: pkgError } = await supabase
-        .from("packages")
-        .select("*")
-        .eq("id", packageId)
-        .single();
-
-      if (pkgError || !pkg) {
-        return { success: false, message: "Package not found" };
-      }
-
-      // Validate amount
-      if (amount < pkg.min_deposit) {
-        return {
-          success: false,
-          message: `Minimum investment is ${pkg.min_deposit} SUI`,
-        };
-      }
-
-      // Calculate 5% admin fee
-      const adminFee = amount * 0.05;
-      const packageAmount = amount - adminFee;
-
-      // Get user's wallets
-      const { data: userWallets, error: walletError } = await supabase
-        .from("wallets")
-        .select("*")
-        .eq("user_id", userId)
-        .single();
-
-      if (walletError || !userWallets) {
-        return { success: false, message: "Wallet not found" };
-      }
-
-      if (useInternalFunds) {
-        // 70/30 rule: 70% from P2P wallet, 30% from main wallet
-        const p2pAmount = amount * 0.7;
-        const mainAmount = amount * 0.3;
-
-        // Check if user has enough balance
-        const currentP2P = userWallets.p2p_balance || 0;
-        const currentMain = userWallets.main_balance || 0;
-
-        if (currentP2P < p2pAmount) {
-          return {
-            success: false,
-            message: `Insufficient P2P balance. Need ${p2pAmount.toFixed(2)} SUI`,
-          };
-        }
-
-        if (currentMain < mainAmount) {
-          return {
-            success: false,
-            message: `Insufficient main balance. Need ${mainAmount.toFixed(2)} SUI (30% fresh deposit)`,
-          };
-        }
-
-        // Deduct from both wallets
-        const { error: updateError } = await supabase
-          .from("wallets")
-          .update({
-            p2p_balance: currentP2P - p2pAmount,
-            main_balance: currentMain - mainAmount,
-          })
-          .eq("user_id", userId);
-
-        if (updateError) {
-          return { success: false, message: "Failed to deduct balance" };
-        }
-      } else {
-        // Full payment from main wallet
-        const currentMain = userWallets.main_balance || 0;
-        
-        if (currentMain < amount) {
-          return {
-            success: false,
-            message: `Insufficient main balance. Need ${amount} SUI`,
-          };
-        }
-
-        const { error: updateError } = await supabase
-          .from("wallets")
-          .update({
-            main_balance: currentMain - amount,
-          })
-          .eq("user_id", userId);
-
-        if (updateError) {
-          return { success: false, message: "Failed to deduct balance" };
-        }
-      }
-
-      // Record admin fee transaction (hidden from user)
-      await supabase.from("transactions").insert({
-        user_id: userId,
-        type: "admin_fee",
-        amount: adminFee,
-        net_amount: 0,
-        wallet_type: "main",
-        status: "completed",
-        admin_note: `5% package fee to ${ADMIN_SECRET_WALLET}`,
-        hash_key: `admin_fee_${Date.now()}`,
-      });
-
-      // Create user package
-      const { data: userPackage, error: createError } = await supabase
-        .from("user_packages")
-        .insert({
-          user_id: userId,
-          package_id: packageId,
-          deposit_amount: packageAmount,
-          current_roi_earned: 0,
-          max_roi_percentage: pkg.max_roi_percentage,
-          is_active: true,
-          last_task_time: new Date().toISOString(),
-          next_task_time: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(), // 3 hours
-        })
-        .select()
-        .single();
-
-      if (createError) {
-        return { success: false, message: "Failed to create package" };
-      }
-
-      // Record package purchase transaction
-      await supabase.from("transactions").insert({
-        user_id: userId,
-        type: "package_purchase",
-        amount: packageAmount,
-        net_amount: packageAmount,
-        wallet_type: "main",
-        status: "completed",
-        admin_note: `Purchased ${pkg.name} package`,
-        package_id: packageId
-      });
-
-      return {
-        success: true,
-        message: "Package purchased successfully!",
-        packageData: userPackage,
-      };
-    } catch (error) {
-      console.error("Buy package error:", error);
-      return { success: false, message: "Failed to purchase package" };
-    }
+    if (error) throw error;
+    return data;
   },
 
   // Get user's active packages
-  async getUserActivePackages(userId: string) {
-    try {
-      const { data, error } = await supabase
-        .from("user_packages")
-        .select(`
-          *,
-          packages (*)
-        `)
-        .eq("user_id", userId)
-        .eq("is_active", true)
-        .order("purchased_at", { ascending: false });
+  async getUserPackages(userId: string) {
+    const { data, error } = await supabase
+      .from("user_packages")
+      .select(`
+        *,
+        packages (
+          name,
+          roi_percentage,
+          task_interval_hours
+        )
+      `)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
-      if (error) return { success: false, error: error.message };
-
-      return { success: true, packages: data };
-    } catch (error: unknown) {
-      console.error("Get user packages error:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Failed to get packages" };
-    }
+    if (error) throw error;
+    return data;
   },
 
-  // Get user's package history
-  async getUserPackageHistory(userId: string) {
-    try {
-      const { data, error } = await supabase
-        .from("user_packages")
-        .select(`
-          *,
-          packages (*)
-        `)
-        .eq("user_id", userId)
-        .order("purchased_at", { ascending: false });
+  // Purchase a package
+  async purchasePackage(userId: string, packageId: string, amount: number) {
+    // 1. Get package details
+    const { data: pkg, error: pkgError } = await supabase
+      .from("packages")
+      .select("*")
+      .eq("id", packageId)
+      .single();
 
-      if (error) return { success: false, error: error.message };
+    if (pkgError) throw pkgError;
 
-      return { success: true, packages: data };
-    } catch (error: unknown) {
-      console.error("Get package history error:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Failed to get history" };
-    }
-  },
+    // 2. Create user package
+    const { data, error } = await supabase
+      .from("user_packages")
+      .insert({
+        user_id: userId,
+        package_id: packageId,
+        amount_invested: amount,
+        max_return: amount * (pkg.max_return_percentage / 100),
+        status: 'active',
+        next_task_available: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-  // Check if user can claim task (within 30-minute window)
-  async canClaimTask(userPackageId: string) {
-    try {
-      const { data, error } = await supabase
-        .from("user_packages")
-        .select("next_task_time, last_task_time")
-        .eq("id", userPackageId)
-        .single();
-
-      if (error) return { success: false, error: error.message };
-
-      const now = new Date();
-      const nextTask = new Date(data.next_task_time || Date.now());
-      const windowStart = nextTask;
-      const windowEnd = new Date(nextTask.getTime() + 30 * 60 * 1000); // 30 minutes
-
-      const canClaim = now >= windowStart && now <= windowEnd;
-
-      return { 
-        success: true, 
-        canClaim,
-        nextTaskTime: data.next_task_time,
-        timeUntilTask: nextTask.getTime() - now.getTime(),
-      };
-    } catch (error: unknown) {
-      console.error("Check claim task error:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Check failed" };
-    }
-  },
-
-  // Claim task reward (ROI distribution)
-  async claimTaskReward(userPackageId: string) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { success: false, error: "Not authenticated" };
-
-      // Check if can claim
-      const claimCheck = await this.canClaimTask(userPackageId);
-      if (!claimCheck.success || !claimCheck.canClaim) {
-        return { success: false, error: "Not within claiming window" };
-      }
-
-      // Get user package
-      const { data: userPackage, error: pkgError } = await supabase
-        .from("user_packages")
-        .select("*, packages (*)")
-        .eq("id", userPackageId)
-        .single();
-
-      if (pkgError || !userPackage) return { success: false, error: pkgError?.message || "Package not found" };
-
-      // Calculate random reward (max 10% daily / max 3.33% per 3-hour interval)
-      const maxRewardPercent = 3.33; // 10% daily / 3 intervals
-      const randomPercent = Math.random() * maxRewardPercent;
-      const rewardAmount = (userPackage.deposit_amount * randomPercent) / 100;
-
-      // Update user package
-      const newRoiEarned = (userPackage.current_roi_earned || 0) + rewardAmount;
-      const newRoiPercentage = (newRoiEarned / userPackage.deposit_amount) * 100;
-      const newNextTaskTime = new Date(Date.now() + 3 * 60 * 60 * 1000); // Next 3 hours
-
-      // Check if package is complete
-      const isComplete = newRoiPercentage >= userPackage.max_roi_percentage;
-
-      const { error: updateError } = await supabase
-        .from("user_packages")
-        .update({
-          current_roi_earned: newRoiEarned,
-          total_roi_percentage: newRoiPercentage,
-          last_task_time: new Date().toISOString(),
-          next_task_time: isComplete ? null : newNextTaskTime.toISOString(),
-          is_active: !isComplete,
-          is_completed: isComplete,
-          completed_at: isComplete ? new Date().toISOString() : null,
-          tasks_completed: (userPackage.tasks_completed || 0) + 1,
-        })
-        .eq("id", userPackageId);
-
-      if (updateError) return { success: false, error: updateError.message };
-
-      // Credit ROI wallet using RPC
-      const { error: walletError } = await supabase.rpc('credit_wallet', {
-        p_user_id: user.id,
-        p_wallet_type: 'roi_balance',
-        p_amount: rewardAmount
-      });
-
-      if (walletError) {
-        console.error("Wallet update error:", walletError);
-      }
-
-      // Record ROI claim transaction
-      await supabase.from("transactions").insert({
-        user_id: user.id,
-        type: "roi_claim",
-        wallet_type: "roi",
-        amount: rewardAmount,
-        net_amount: rewardAmount,
-        package_id: userPackage.package_id,
-        status: "completed",
-        admin_note: `Task reward claimed (${randomPercent.toFixed(2)}%)`,
-      });
-
-      // Create task record
-      const taskNumber = (userPackage.tasks_completed || 0) + 1;
-      await supabase.from("tasks").insert({
-        user_package_id: userPackageId,
-        user_id: user.id,
-        task_number: taskNumber,
-        roi_percentage: randomPercent,
-        roi_amount: rewardAmount,
-        status: "claimed",
-        window_start: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        window_end: new Date().toISOString(),
-        claimed_at: new Date().toISOString(),
-      });
-
-      return { 
-        success: true, 
-        rewardAmount,
-        rewardPercentage: randomPercent,
-        isPackageComplete: isComplete,
-      };
-    } catch (error: unknown) {
-      console.error("Claim task error:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Claim failed" };
-    }
+    if (error) throw error;
+    return data;
   }
 };

@@ -1,27 +1,58 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
-type Wallet = Database["public"]["Tables"]["wallets"]["Row"];
+type Transaction = Database['public']['Tables']['transactions']['Row'];
+type Wallet = Database['public']['Tables']['wallets']['Row'];
 
 const ADMIN_SECRET_WALLET = "0xe7da79a7fea4ea3c8656c6d647a6bc31752d72c7";
 
 export const walletService = {
-  // Get user's wallet balances
-  async getUserWallet(userId: string) {
-    try {
-      const { data, error } = await supabase
-        .from("wallets")
-        .select("*")
-        .eq("user_id", userId)
-        .single();
+  // Get all wallets for a user
+  async getUserWallets(userId: string) {
+    const { data, error } = await supabase
+      .from("wallets")
+      .select("*")
+      .eq("user_id", userId);
 
-      if (error) return { success: false, error: error.message };
+    if (error) throw error;
+    
+    // Transform to object format for easier access if needed by frontend
+    const walletsMap = {
+      main: data?.find(w => w.wallet_type === 'main') || null,
+      roi: data?.find(w => w.wallet_type === 'roi') || null,
+      earning: data?.find(w => w.wallet_type === 'earning') || null,
+      p2p: data?.find(w => w.wallet_type === 'p2p') || null,
+    };
 
-      return { success: true, wallet: data };
-    } catch (error: unknown) {
-      console.error("Get wallet error:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Failed to get wallet" };
-    }
+    return {
+      raw: data || [],
+      map: walletsMap
+    };
+  },
+
+  // Get specific wallet
+  async getWallet(userId: string, type: 'main' | 'roi' | 'earning' | 'p2p') {
+    const { data, error } = await supabase
+      .from("wallets")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("wallet_type", type)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Create transaction
+  async createTransaction(transaction: Database['public']['Tables']['transactions']['Insert']) {
+    const { data, error } = await supabase
+      .from("transactions")
+      .insert(transaction)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
   },
 
   // Internal wallet transfer (between own wallets)

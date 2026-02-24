@@ -405,5 +405,65 @@ export const authService = {
   // Listen to auth state changes
   onAuthStateChange(callback: (event: string, session: Session | null) => void) {
     return supabase.auth.onAuthStateChange(callback);
+  },
+
+  // Sign up with email/password
+  async signUp(email: string, password: string, username: string, fullName: string, referralCode?: string) {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username,
+          full_name: fullName,
+        },
+      },
+    });
+
+    if (authError) throw authError;
+
+    if (authData.user) {
+      // Create profile
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+          id: authData.user.id,
+          email,
+          username,
+          full_name: fullName,
+          referral_code: Math.random().toString(36).substring(7).toUpperCase(), // Generate random code
+          referred_by: referralCode ? await this.getUserIdByReferralCode(referralCode) : null,
+        });
+
+      if (profileError) throw profileError;
+
+      // Create wallets
+      const walletTypes = ['main', 'roi', 'earning', 'p2p'];
+      const walletInserts = walletTypes.map(type => ({
+        user_id: authData.user!.id,
+        wallet_type: type,
+        balance: 0,
+        locked_balance: 0
+      }));
+
+      const { error: walletError } = await supabase
+        .from("wallets")
+        .insert(walletInserts);
+
+      if (walletError) throw walletError;
+    }
+
+    return authData;
+  },
+
+  async getUserIdByReferralCode(code: string) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("referral_code", code)
+      .single();
+    
+    if (error || !data) return null;
+    return data.id;
   }
 };
