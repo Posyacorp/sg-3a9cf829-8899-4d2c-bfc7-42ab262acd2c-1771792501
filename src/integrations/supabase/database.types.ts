@@ -40,19 +40,48 @@ export type Database = {
           token?: string
           user_id?: string
         }
+        Relationships: []
+      }
+      commissions: {
+        Row: {
+          amount: number
+          commission_type: string
+          created_at: string | null
+          from_user_id: string
+          id: string
+          level: number
+          percentage: number
+          source_transaction_id: string | null
+          to_user_id: string
+        }
+        Insert: {
+          amount: number
+          commission_type: string
+          created_at?: string | null
+          from_user_id: string
+          id?: string
+          level: number
+          percentage: number
+          source_transaction_id?: string | null
+          to_user_id: string
+        }
+        Update: {
+          amount?: number
+          commission_type?: string
+          created_at?: string | null
+          from_user_id?: string
+          id?: string
+          level?: number
+          percentage?: number
+          source_transaction_id?: string | null
+          to_user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "admin_impersonation_admin_id_fkey"
-            columns: ["admin_id"]
+            foreignKeyName: "commissions_source_transaction_id_fkey"
+            columns: ["source_transaction_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "admin_impersonation_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -88,15 +117,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "filter_presets_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       fraud_alerts: {
         Row: {
@@ -135,22 +156,7 @@ export type Database = {
           severity?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "fraud_alerts_resolved_by_fkey"
-            columns: ["resolved_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fraud_alerts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       mlm_commissions: {
         Row: {
@@ -204,24 +210,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "mlm_commissions_package_id_fkey"
-            columns: ["package_id"]
-            isOneToOne: false
-            referencedRelation: "packages"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "mlm_commissions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "mlm_commissions_user_package_id_fkey"
-            columns: ["user_package_id"]
-            isOneToOne: false
-            referencedRelation: "user_packages"
             referencedColumns: ["id"]
           },
         ]
@@ -299,55 +291,41 @@ export type Database = {
           type?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "notifications_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       packages: {
         Row: {
+          amount: number
           created_at: string | null
           daily_roi_limit: number | null
           id: string
           is_active: boolean | null
-          max_roi_percentage: number
-          min_deposit: number
+          max_return_percentage: number
           name: string
-          sort_order: number | null
+          roi_percentage: number
           task_interval_hours: number | null
-          task_window_minutes: number | null
-          updated_at: string | null
         }
         Insert: {
+          amount: number
           created_at?: string | null
           daily_roi_limit?: number | null
           id?: string
           is_active?: boolean | null
-          max_roi_percentage: number
-          min_deposit: number
+          max_return_percentage: number
           name: string
-          sort_order?: number | null
+          roi_percentage: number
           task_interval_hours?: number | null
-          task_window_minutes?: number | null
-          updated_at?: string | null
         }
         Update: {
+          amount?: number
           created_at?: string | null
           daily_roi_limit?: number | null
           id?: string
           is_active?: boolean | null
-          max_roi_percentage?: number
-          min_deposit?: number
+          max_return_percentage?: number
           name?: string
-          sort_order?: number | null
+          roi_percentage?: number
           task_interval_hours?: number | null
-          task_window_minutes?: number | null
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -371,6 +349,53 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      prediction_bets: {
+        Row: {
+          amount: number
+          bet_type: string
+          created_at: string | null
+          entry_price: number
+          id: string
+          payout: number | null
+          prediction_id: string
+          shares: number
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          bet_type: string
+          created_at?: string | null
+          entry_price: number
+          id?: string
+          payout?: number | null
+          prediction_id: string
+          shares: number
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          bet_type?: string
+          created_at?: string | null
+          entry_price?: number
+          id?: string
+          payout?: number | null
+          prediction_id?: string
+          shares?: number
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prediction_bets_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: false
+            referencedRelation: "predictions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       prediction_markets: {
         Row: {
@@ -497,158 +522,134 @@ export type Database = {
           },
         ]
       }
+      predictions: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          end_date: string
+          id: string
+          no_price: number | null
+          resolved_at: string | null
+          result: string | null
+          status: string | null
+          title: string
+          total_volume: number | null
+          yes_price: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          end_date: string
+          id?: string
+          no_price?: number | null
+          resolved_at?: string | null
+          result?: string | null
+          status?: string | null
+          title: string
+          total_volume?: number | null
+          yes_price?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          end_date?: string
+          id?: string
+          no_price?: number | null
+          resolved_at?: string | null
+          result?: string | null
+          status?: string | null
+          title?: string
+          total_volume?: number | null
+          yes_price?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
-          avatar_url: string | null
-          bio: string | null
           created_at: string | null
-          email: string | null
-          email_notifications: boolean | null
-          fraud_score: number | null
+          email: string
           full_name: string | null
           id: string
           ip_address: string | null
-          is_flagged_for_review: boolean | null
-          kyc_verified: boolean | null
-          language: string | null
-          last_ip_address: string | null
-          password_hash: string | null
-          phone: string | null
-          referral_code: string | null
+          is_active: boolean | null
+          is_admin: boolean | null
+          referral_code: string
           referred_by: string | null
-          role: string | null
           star_rank: number | null
-          status: string | null
           team_volume: number | null
-          timezone: string | null
-          total_deposited: number | null
-          total_earned: number | null
-          total_withdrawn: number | null
-          two_factor_enabled: boolean | null
-          two_factor_secret: string | null
           updated_at: string | null
-          username: string | null
+          username: string
         }
         Insert: {
-          avatar_url?: string | null
-          bio?: string | null
           created_at?: string | null
-          email?: string | null
-          email_notifications?: boolean | null
-          fraud_score?: number | null
+          email: string
           full_name?: string | null
           id: string
           ip_address?: string | null
-          is_flagged_for_review?: boolean | null
-          kyc_verified?: boolean | null
-          language?: string | null
-          last_ip_address?: string | null
-          password_hash?: string | null
-          phone?: string | null
-          referral_code?: string | null
+          is_active?: boolean | null
+          is_admin?: boolean | null
+          referral_code: string
           referred_by?: string | null
-          role?: string | null
           star_rank?: number | null
-          status?: string | null
           team_volume?: number | null
-          timezone?: string | null
-          total_deposited?: number | null
-          total_earned?: number | null
-          total_withdrawn?: number | null
-          two_factor_enabled?: boolean | null
-          two_factor_secret?: string | null
           updated_at?: string | null
-          username?: string | null
+          username: string
         }
         Update: {
-          avatar_url?: string | null
-          bio?: string | null
           created_at?: string | null
-          email?: string | null
-          email_notifications?: boolean | null
-          fraud_score?: number | null
+          email?: string
           full_name?: string | null
           id?: string
           ip_address?: string | null
-          is_flagged_for_review?: boolean | null
-          kyc_verified?: boolean | null
-          language?: string | null
-          last_ip_address?: string | null
-          password_hash?: string | null
-          phone?: string | null
-          referral_code?: string | null
+          is_active?: boolean | null
+          is_admin?: boolean | null
+          referral_code?: string
           referred_by?: string | null
-          role?: string | null
           star_rank?: number | null
-          status?: string | null
           team_volume?: number | null
-          timezone?: string | null
-          total_deposited?: number | null
-          total_earned?: number | null
-          total_withdrawn?: number | null
-          two_factor_enabled?: boolean | null
-          two_factor_secret?: string | null
           updated_at?: string | null
-          username?: string | null
+          username?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_referred_by_fkey"
-            columns: ["referred_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       tasks: {
         Row: {
-          claimed_at: string | null
+          clicked_at: string | null
           created_at: string | null
           id: string
-          roi_amount: number | null
-          roi_percentage: number | null
-          status: string
-          task_number: number
+          reward_amount: number
+          reward_percentage: number
+          status: string | null
           user_id: string
           user_package_id: string
-          window_end: string
-          window_start: string
         }
         Insert: {
-          claimed_at?: string | null
+          clicked_at?: string | null
           created_at?: string | null
           id?: string
-          roi_amount?: number | null
-          roi_percentage?: number | null
-          status?: string
-          task_number: number
+          reward_amount: number
+          reward_percentage: number
+          status?: string | null
           user_id: string
           user_package_id: string
-          window_end: string
-          window_start: string
         }
         Update: {
-          claimed_at?: string | null
+          clicked_at?: string | null
           created_at?: string | null
           id?: string
-          roi_amount?: number | null
-          roi_percentage?: number | null
-          status?: string
-          task_number?: number
+          reward_amount?: number
+          reward_percentage?: number
+          status?: string | null
           user_id?: string
           user_package_id?: string
-          window_end?: string
-          window_start?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "tasks_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "tasks_user_package_id_fkey"
             columns: ["user_package_id"]
@@ -728,102 +729,54 @@ export type Database = {
       }
       transactions: {
         Row: {
-          admin_note: string | null
+          admin_notes: string | null
           amount: number
-          approved_at: string | null
-          approved_by: string | null
           created_at: string | null
           fee: number | null
-          from_user_id: string | null
+          from_wallet: string | null
           hash_key: string | null
           id: string
-          net_amount: number
-          package_id: string | null
-          status: string
-          to_user_id: string | null
-          type: string
-          updated_at: string | null
+          processed_at: string | null
+          recipient_id: string | null
+          status: string | null
+          to_wallet: string | null
+          transaction_type: string
           user_id: string
           wallet_address: string | null
-          wallet_type: string
         }
         Insert: {
-          admin_note?: string | null
+          admin_notes?: string | null
           amount: number
-          approved_at?: string | null
-          approved_by?: string | null
           created_at?: string | null
           fee?: number | null
-          from_user_id?: string | null
+          from_wallet?: string | null
           hash_key?: string | null
           id?: string
-          net_amount: number
-          package_id?: string | null
-          status?: string
-          to_user_id?: string | null
-          type: string
-          updated_at?: string | null
+          processed_at?: string | null
+          recipient_id?: string | null
+          status?: string | null
+          to_wallet?: string | null
+          transaction_type: string
           user_id: string
           wallet_address?: string | null
-          wallet_type: string
         }
         Update: {
-          admin_note?: string | null
+          admin_notes?: string | null
           amount?: number
-          approved_at?: string | null
-          approved_by?: string | null
           created_at?: string | null
           fee?: number | null
-          from_user_id?: string | null
+          from_wallet?: string | null
           hash_key?: string | null
           id?: string
-          net_amount?: number
-          package_id?: string | null
-          status?: string
-          to_user_id?: string | null
-          type?: string
-          updated_at?: string | null
+          processed_at?: string | null
+          recipient_id?: string | null
+          status?: string | null
+          to_wallet?: string | null
+          transaction_type?: string
           user_id?: string
           wallet_address?: string | null
-          wallet_type?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "transactions_approved_by_fkey"
-            columns: ["approved_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_from_user_id_fkey"
-            columns: ["from_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_package_id_fkey"
-            columns: ["package_id"]
-            isOneToOne: false
-            referencedRelation: "packages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_to_user_id_fkey"
-            columns: ["to_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_activity: {
         Row: {
@@ -853,63 +806,49 @@ export type Database = {
           metadata?: Json | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_activity_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_packages: {
         Row: {
+          amount_invested: number
           completed_at: string | null
-          current_roi_earned: number | null
-          deposit_amount: number
+          created_at: string | null
           id: string
-          is_active: boolean | null
-          is_completed: boolean | null
-          last_task_time: string | null
-          max_roi_percentage: number
-          next_task_time: string | null
+          last_task_click: string | null
+          max_return: number
+          missed_tasks: number | null
+          next_task_available: string | null
           package_id: string
-          purchased_at: string | null
-          tasks_completed: number | null
-          total_roi_percentage: number | null
+          status: string | null
+          total_earned: number | null
           user_id: string
         }
         Insert: {
+          amount_invested: number
           completed_at?: string | null
-          current_roi_earned?: number | null
-          deposit_amount: number
+          created_at?: string | null
           id?: string
-          is_active?: boolean | null
-          is_completed?: boolean | null
-          last_task_time?: string | null
-          max_roi_percentage: number
-          next_task_time?: string | null
+          last_task_click?: string | null
+          max_return: number
+          missed_tasks?: number | null
+          next_task_available?: string | null
           package_id: string
-          purchased_at?: string | null
-          tasks_completed?: number | null
-          total_roi_percentage?: number | null
+          status?: string | null
+          total_earned?: number | null
           user_id: string
         }
         Update: {
+          amount_invested?: number
           completed_at?: string | null
-          current_roi_earned?: number | null
-          deposit_amount?: number
+          created_at?: string | null
           id?: string
-          is_active?: boolean | null
-          is_completed?: boolean | null
-          last_task_time?: string | null
-          max_roi_percentage?: number
-          next_task_time?: string | null
+          last_task_click?: string | null
+          max_return?: number
+          missed_tasks?: number | null
+          next_task_available?: string | null
           package_id?: string
-          purchased_at?: string | null
-          tasks_completed?: number | null
-          total_roi_percentage?: number | null
+          status?: string | null
+          total_earned?: number | null
           user_id?: string
         }
         Relationships: [
@@ -918,13 +857,6 @@ export type Database = {
             columns: ["package_id"]
             isOneToOne: false
             referencedRelation: "packages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_packages_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -997,53 +929,33 @@ export type Database = {
       }
       wallets: {
         Row: {
+          balance: number | null
           created_at: string | null
-          earning_balance: number | null
           id: string
           locked_balance: number | null
-          main_balance: number | null
-          p2p_balance: number | null
-          roi_balance: number | null
-          total_deposited: number | null
-          total_withdrawn: number | null
           updated_at: string | null
           user_id: string
+          wallet_type: string
         }
         Insert: {
+          balance?: number | null
           created_at?: string | null
-          earning_balance?: number | null
           id?: string
           locked_balance?: number | null
-          main_balance?: number | null
-          p2p_balance?: number | null
-          roi_balance?: number | null
-          total_deposited?: number | null
-          total_withdrawn?: number | null
           updated_at?: string | null
           user_id: string
+          wallet_type: string
         }
         Update: {
+          balance?: number | null
           created_at?: string | null
-          earning_balance?: number | null
           id?: string
           locked_balance?: number | null
-          main_balance?: number | null
-          p2p_balance?: number | null
-          roi_balance?: number | null
-          total_deposited?: number | null
-          total_withdrawn?: number | null
           updated_at?: string | null
           user_id?: string
+          wallet_type?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "wallets_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
